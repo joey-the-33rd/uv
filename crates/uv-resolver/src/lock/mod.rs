@@ -9,6 +9,7 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use itertools::Itertools;
+use jiff::Timestamp;
 use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
@@ -19,7 +20,7 @@ use tracing::debug;
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
-use uv_configuration::BuildOptions;
+use uv_configuration::{BuildOptions, Constraints};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
@@ -27,9 +28,9 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     redact_credentials, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
     DirectorySourceDist, Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations,
-    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, ResolvedDist, StaticMetadata,
-    ToUrlError, UrlString,
+    IndexMetadata, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
+    ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -41,16 +42,19 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictPackage, Conflicts, HashDigest, HashDigests, ParsedArchiveUrl, ParsedGitUrl,
+    ConflictPackage, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
+    ParsedGitUrl,
 };
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
 
 use crate::fork_strategy::ForkStrategy;
+pub(crate) use crate::lock::export::PylockTomlPackage;
+pub use crate::lock::export::RequirementsTxtExport;
+pub use crate::lock::export::{PylockToml, PylockTomlErrorKind};
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
-pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
@@ -60,16 +64,16 @@ use crate::{
     ResolverOutput,
 };
 
+mod export;
 mod installable;
 mod map;
-mod requirements_txt;
 mod tree;
 
 /// The current version of the lockfile format.
 pub const VERSION: u32 = 1;
 
 /// The current revision of the lockfile format.
-const REVISION: u32 = 1;
+const REVISION: u32 = 2;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -674,13 +678,24 @@ impl Lock {
         &self.manifest.dependency_groups
     }
 
+    /// Returns the build constraints that were used to generate this lock.
+    pub fn build_constraints(&self, root: &Path) -> Constraints {
+        Constraints::from_requirements(
+            self.manifest
+                .build_constraints
+                .iter()
+                .cloned()
+                .map(|requirement| requirement.to_absolute(root)),
+        )
+    }
+
     /// Return the workspace root used to generate this lock.
     pub fn root(&self) -> Option<&Package> {
         self.packages.iter().find(|package| {
             let (Source::Editable(path) | Source::Virtual(path)) = &package.id.source else {
                 return false;
             };
-            path == Path::new("")
+            path.as_ref() == Path::new("")
         })
     }
 
@@ -931,6 +946,26 @@ impl Lock {
                 manifest_table.insert("overrides", value(overrides));
             }
 
+            if !self.manifest.build_constraints.is_empty() {
+                let build_constraints = self
+                    .manifest
+                    .build_constraints
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let build_constraints = match build_constraints.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    build_constraints => each_element_on_its_line_array(build_constraints.iter()),
+                };
+                manifest_table.insert("build-constraints", value(build_constraints));
+            }
+
             if !self.manifest.dependency_groups.is_empty() {
                 let mut dependency_groups = Table::new();
                 for (extra, requirements) in &self.manifest.dependency_groups {
@@ -1072,7 +1107,7 @@ impl Lock {
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
     fn satisfies_provides_extra<'lock>(
         &self,
-        provides_extra: Vec<ExtraName>,
+        provides_extra: Box<[ExtraName]>,
         package: &'lock Package,
     ) -> SatisfiesResult<'lock> {
         if !self.supports_provides_extra() {
@@ -1083,7 +1118,7 @@ impl Lock {
         let actual: BTreeSet<_> = package.metadata.provides_extras.iter().collect();
 
         if expected != actual {
-            let expected = provides_extra.into_iter().collect();
+            let expected = Box::into_iter(provides_extra).collect();
             return SatisfiesResult::MismatchedPackageProvidesExtra(
                 &package.id.name,
                 package.id.version.as_ref(),
@@ -1099,8 +1134,8 @@ impl Lock {
     #[allow(clippy::unused_self)]
     fn satisfies_requires_dist<'lock>(
         &self,
-        requires_dist: Vec<Requirement>,
-        dependency_groups: BTreeMap<GroupName, Vec<Requirement>>,
+        requires_dist: Box<[Requirement]>,
+        dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
         package: &'lock Package,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
@@ -1117,8 +1152,7 @@ impl Lock {
         };
 
         // Validate the `requires-dist` metadata.
-        let expected: BTreeSet<_> = requires_dist
-            .into_iter()
+        let expected: BTreeSet<_> = Box::into_iter(requires_dist)
             .map(|requirement| normalize_requirement(requirement, root))
             .collect::<Result<_, _>>()?;
         let actual: BTreeSet<_> = package
@@ -1145,8 +1179,7 @@ impl Lock {
             .map(|(group, requirements)| {
                 Ok::<_, LockError>((
                     group,
-                    requirements
-                        .into_iter()
+                    Box::into_iter(requirements)
                         .map(|requirement| normalize_requirement(requirement, root))
                         .collect::<Result<_, _>>()?,
                 ))
@@ -1190,6 +1223,7 @@ impl Lock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
@@ -1281,6 +1315,27 @@ impl Lock {
             }
         }
 
+        // Validate that the lockfile was generated with the same build constraints.
+        {
+            let expected: BTreeSet<_> = build_constraints
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = self
+                .manifest
+                .build_constraints
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?;
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedBuildConstraints(
+                    expected, actual,
+                ));
+            }
+        }
+
         // Validate that the lockfile was generated with the dependency groups.
         {
             let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = dependency_groups
@@ -1356,7 +1411,8 @@ impl Lock {
                         let path = url.to_file_path().ok()?;
                         let path = relative_to(&path, root)
                             .or_else(|_| std::path::absolute(path))
-                            .ok()?;
+                            .ok()?
+                            .into_boxed_path();
                         Some(path)
                     }
                 })
@@ -1407,7 +1463,7 @@ impl Lock {
                             return Ok(SatisfiesResult::MissingLocalIndex(name, version, path));
                         }
                     }
-                };
+                }
             }
 
             // If the package is immutable, we don't need to validate it (or its dependencies).
@@ -1686,6 +1742,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The lockfile uses a different set of build constraints.
+    MismatchedBuildConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of dependency groups.
     MismatchedDependencyGroups(
         BTreeMap<GroupName, BTreeSet<Requirement>>,
@@ -1698,7 +1756,7 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile referenced a remote index that was not provided
     MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
-    MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock PathBuf),
+    MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock Path),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,
@@ -1766,6 +1824,9 @@ pub struct ResolverManifest {
     /// The overrides provided to the resolver.
     #[serde(default)]
     overrides: BTreeSet<Requirement>,
+    /// The build constraints provided to the resolver.
+    #[serde(default)]
+    build_constraints: BTreeSet<Requirement>,
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
@@ -1779,6 +1840,7 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
+        build_constraints: impl IntoIterator<Item = Requirement>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
@@ -1787,6 +1849,7 @@ impl ResolverManifest {
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
+            build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
                 .map(|(group, requirements)| (group, requirements.into_iter().collect()))
@@ -1811,6 +1874,11 @@ impl ResolverManifest {
                 .collect::<Result<BTreeSet<_>, _>>()?,
             overrides: self
                 .overrides
+                .into_iter()
+                .map(|requirement| requirement.relative_to(root))
+                .collect::<Result<BTreeSet<_>, _>>()?,
+            build_constraints: self
+                .build_constraints
                 .into_iter()
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
@@ -1920,6 +1988,7 @@ impl TryFrom<LockWire> for Lock {
 /// to the version field, we can verify compatibility for lockfiles that may otherwise be
 /// unparsable.
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct LockVersion {
     version: u32,
 }
@@ -1976,7 +2045,7 @@ impl Package {
                 .map_err(LockErrorKind::RequirementRelativePath)?
         };
         let provides_extras = if id.source.is_immutable() {
-            Vec::default()
+            Box::default()
         } else {
             annotated_dist
                 .metadata
@@ -2135,7 +2204,7 @@ impl Package {
                         let wheels = self
                             .wheels
                             .iter()
-                            .map(|wheel| wheel.to_registry_dist(source, workspace_root))
+                            .map(|wheel| wheel.to_registry_wheel(source, workspace_root))
                             .collect::<Result<_, LockError>>()?;
                         let reg_built_dist = RegistryBuiltDist {
                             wheels,
@@ -2151,7 +2220,7 @@ impl Package {
                         let path_dist = PathBuiltDist {
                             filename,
                             url: verbatim_url(&install_path, &self.id)?,
-                            install_path: absolute_path(workspace_root, path)?,
+                            install_path: absolute_path(workspace_root, path)?.into_boxed_path(),
                         };
                         let built_dist = BuiltDist::Path(path_dist);
                         Ok(Dist::Built(built_dist))
@@ -2193,11 +2262,14 @@ impl Package {
                     }
                     .into()),
                 };
-            };
+            }
         }
 
-        if !no_build {
-            if let Some(sdist) = self.to_source_dist(workspace_root)? {
+        if let Some(sdist) = self.to_source_dist(workspace_root)? {
+            // Even with `--no-build`, allow virtual packages. (In the future, we may want to allow
+            // any local source tree, or at least editable source trees, which we allow in
+            // `uv pip`.)
+            if !no_build || sdist.is_virtual() {
                 return Ok(Dist::Source(sdist));
             }
         }
@@ -2234,78 +2306,19 @@ impl Package {
         }
     }
 
-    /// Generate a [`LockErrorHint`] based on wheel-tag incompatibilities.
-    fn tag_hint(&self, tag_policy: TagPolicy<'_>) -> Option<LockErrorHint> {
-        let incompatibility = self
+    /// Generate a [`WheelTagHint`] based on wheel-tag incompatibilities.
+    fn tag_hint(&self, tag_policy: TagPolicy<'_>) -> Option<WheelTagHint> {
+        let filenames = self
             .wheels
             .iter()
-            .map(|wheel| {
-                tag_policy.tags().compatibility(
-                    wheel.filename.python_tags(),
-                    wheel.filename.abi_tags(),
-                    wheel.filename.platform_tags(),
-                )
-            })
-            .max()?;
-        match incompatibility {
-            TagCompatibility::Incompatible(IncompatibleTag::Python) => {
-                let best = tag_policy.tags().python_tag();
-                let tags = self.python_tags().collect::<BTreeSet<_>>();
-                if tags.is_empty() {
-                    None
-                } else {
-                    Some(LockErrorHint::LanguageTags {
-                        package: self.id.name.clone(),
-                        version: self.id.version.clone(),
-                        tags,
-                        best,
-                    })
-                }
-            }
-            TagCompatibility::Incompatible(IncompatibleTag::Abi) => {
-                let best = tag_policy.tags().abi_tag();
-                let tags = self
-                    .abi_tags()
-                    // Ignore `none`, which is universally compatible.
-                    //
-                    // As an example, `none` can appear here if we're solving for Python 3.13, and
-                    // the distribution includes a wheel for `cp312-none-macosx_11_0_arm64`.
-                    //
-                    // In that case, the wheel isn't compatible, but when solving for Python 3.13,
-                    // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
-                    // so this is considered an ABI incompatibility rather than Python incompatibility.
-                    .filter(|tag| *tag != AbiTag::None)
-                    .collect::<BTreeSet<_>>();
-                if tags.is_empty() {
-                    None
-                } else {
-                    Some(LockErrorHint::AbiTags {
-                        package: self.id.name.clone(),
-                        version: self.id.version.clone(),
-                        tags,
-                        best,
-                    })
-                }
-            }
-            TagCompatibility::Incompatible(IncompatibleTag::Platform) => {
-                let best = tag_policy.tags().platform_tag().cloned();
-                let tags = self
-                    .platform_tags(tag_policy.tags())
-                    .cloned()
-                    .collect::<BTreeSet<_>>();
-                if tags.is_empty() {
-                    None
-                } else {
-                    Some(LockErrorHint::PlatformTags {
-                        package: self.id.name.clone(),
-                        version: self.id.version.clone(),
-                        tags,
-                        best,
-                    })
-                }
-            }
-            _ => None,
-        }
+            .map(|wheel| &wheel.filename)
+            .collect::<Vec<_>>();
+        WheelTagHint::from_wheels(
+            &self.id.name,
+            self.id.version.as_ref(),
+            &filenames,
+            tag_policy.tags(),
+        )
     }
 
     /// Convert the source of this [`Package`] to a [`SourceDist`] that can be used in installation.
@@ -2327,7 +2340,7 @@ impl Package {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     ext,
                 };
                 uv_distribution_types::SourceDist::Path(path_dist)
@@ -2337,7 +2350,7 @@ impl Package {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     editable: false,
                     r#virtual: false,
                 };
@@ -2348,7 +2361,7 @@ impl Package {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     editable: true,
                     r#virtual: false,
                 };
@@ -2359,7 +2372,7 @@ impl Package {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     editable: false,
                     r#virtual: true,
                 };
@@ -2373,11 +2386,8 @@ impl Package {
                 url.set_query(None);
 
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url = uv_git_types::GitUrl::from_commit(
-                    url,
-                    GitReference::from(git.kind.clone()),
-                    git.precise,
-                )?;
+                let git_url =
+                    GitUrl::from_commit(url, GitReference::from(git.kind.clone()), git.precise)?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = Url::from(ParsedGitUrl {
@@ -2399,16 +2409,15 @@ impl Package {
                     return Ok(None);
                 };
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
-                let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
                     url: location.clone(),
-                    subdirectory: subdirectory.clone(),
+                    subdirectory: direct.subdirectory.clone(),
                     ext: DistExtension::Source(ext),
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
                     location: Box::new(location),
-                    subdirectory: subdirectory.clone(),
+                    subdirectory: direct.subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
                 };
@@ -2444,7 +2453,7 @@ impl Package {
                     }),
                     requires_python: None,
                     size: sdist.size(),
-                    upload_time_utc_ms: None,
+                    upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
@@ -2495,7 +2504,7 @@ impl Package {
                     }),
                     requires_python: None,
                     size: sdist.size(),
-                    upload_time_utc_ms: None,
+                    upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
                     yanked: None,
                 });
@@ -2662,43 +2671,6 @@ impl Package {
         Ok(table)
     }
 
-    /// Returns an iterator over the compatible Python tags of the available wheels.
-    fn python_tags(&self) -> impl Iterator<Item = LanguageTag> + '_ {
-        self.wheels
-            .iter()
-            .flat_map(|wheel| wheel.filename.python_tags())
-            .copied()
-    }
-
-    /// Returns an iterator over the compatible Python tags of the available wheels.
-    fn abi_tags(&self) -> impl Iterator<Item = AbiTag> + '_ {
-        self.wheels
-            .iter()
-            .flat_map(|wheel| wheel.filename.abi_tags())
-            .copied()
-    }
-
-    /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
-    /// tags.
-    pub fn platform_tags<'a>(
-        &'a self,
-        tags: &'a Tags,
-    ) -> impl Iterator<Item = &'a PlatformTag> + 'a {
-        self.wheels.iter().flat_map(move |wheel| {
-            if wheel.filename.python_tags().iter().any(|wheel_py| {
-                wheel
-                    .filename
-                    .abi_tags()
-                    .iter()
-                    .any(|wheel_abi| tags.is_compatible_abi(*wheel_py, *wheel_abi))
-            }) {
-                wheel.filename.platform_tags().iter()
-            } else {
-                [].iter()
-            }
-        })
-    }
-
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
         type WheelPriority<'lock> = (TagPriority, Option<&'lock BuildTag>);
 
@@ -2860,7 +2832,7 @@ struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
     #[serde(default)]
-    provides_extras: Vec<ExtraName>,
+    provides_extras: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
@@ -2922,6 +2894,7 @@ impl PackageWire {
 /// Inside the lockfile, we match a dependency entry to a package entry through a key made up
 /// of the name, the version and the source url.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) struct PackageId {
     pub(crate) name: PackageName,
     pub(crate) version: Option<Version>,
@@ -2983,6 +2956,7 @@ impl Display for PackageId {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct PackageIdForDependency {
     name: PackageName,
     version: Option<Version>,
@@ -3057,13 +3031,13 @@ enum Source {
     /// A direct HTTP(S) URL.
     Direct(UrlString, DirectSource),
     /// A path to a local source or built archive.
-    Path(PathBuf),
+    Path(Box<Path>),
     /// A path to a local directory.
-    Directory(PathBuf),
+    Directory(Box<Path>),
     /// A path to a local directory that should be installed as editable.
-    Editable(PathBuf),
+    Editable(Box<Path>),
     /// A path to a local directory that should not be built or installed.
-    Virtual(PathBuf),
+    Virtual(Box<Path>),
 }
 
 impl Source {
@@ -3149,14 +3123,14 @@ impl Source {
         let path = relative_to(&path_dist.install_path, root)
             .or_else(|_| std::path::absolute(&path_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        Ok(Source::Path(path))
+        Ok(Source::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Source, LockError> {
         let path = relative_to(&path_dist.install_path, root)
             .or_else(|_| std::path::absolute(&path_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        Ok(Source::Path(path))
+        Ok(Source::Path(path.into_boxed_path()))
     }
 
     fn from_directory_source_dist(
@@ -3167,11 +3141,11 @@ impl Source {
             .or_else(|_| std::path::absolute(&directory_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable {
-            Ok(Source::Editable(path))
+            Ok(Source::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual {
-            Ok(Source::Virtual(path))
+            Ok(Source::Virtual(path.into_boxed_path()))
         } else {
-            Ok(Source::Directory(path))
+            Ok(Source::Directory(path.into_boxed_path()))
         }
     }
 
@@ -3188,7 +3162,7 @@ impl Source {
                 let path = relative_to(&path, root)
                     .or_else(|_| std::path::absolute(&path))
                     .map_err(LockErrorKind::IndexRelativePath)?;
-                let source = RegistrySource::Path(path);
+                let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Source::Registry(source))
             }
         }
@@ -3356,7 +3330,7 @@ impl Source {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, rename_all = "kebab-case")]
 enum SourceWire {
     Registry {
         registry: RegistrySourceWire,
@@ -3415,7 +3389,7 @@ impl TryFrom<SourceWire> for Source {
             Direct { url, subdirectory } => Ok(Source::Direct(
                 url,
                 DirectSource {
-                    subdirectory: subdirectory.map(PathBuf::from),
+                    subdirectory: subdirectory.map(Box::<std::path::Path>::from),
                 },
             )),
             Path { path } => Ok(Source::Path(path.into())),
@@ -3432,7 +3406,7 @@ enum RegistrySource {
     /// Ex) `https://pypi.org/simple`
     Url(UrlString),
     /// Ex) `../path/to/local/index`
-    Path(PathBuf),
+    Path(Box<Path>),
 }
 
 impl Display for RegistrySource {
@@ -3502,8 +3476,9 @@ impl From<RegistrySourceWire> for RegistrySource {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct DirectSource {
-    subdirectory: Option<PathBuf>,
+    subdirectory: Option<Box<Path>>,
 }
 
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
@@ -3513,7 +3488,7 @@ struct DirectSource {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
     precise: GitOid,
-    subdirectory: Option<PathBuf>,
+    subdirectory: Option<Box<Path>>,
     kind: GitSourceKind,
 }
 
@@ -3536,8 +3511,8 @@ impl GitSource {
                 "branch" => kind = GitSourceKind::Branch(val.into_owned()),
                 "rev" => kind = GitSourceKind::Rev(val.into_owned()),
                 "subdirectory" => subdirectory = Some(PortablePathBuf::from(val.as_ref()).into()),
-                _ => continue,
-            };
+                _ => {}
+            }
         }
         let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
@@ -3551,6 +3526,7 @@ impl GitSource {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 enum GitSourceKind {
     Tag(String),
     Branch(String),
@@ -3560,6 +3536,7 @@ enum GitSourceKind {
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 struct SourceDistMetadata {
     /// A hash of the source distribution.
     hash: Option<Hash>,
@@ -3567,6 +3544,9 @@ struct SourceDistMetadata {
     ///
     /// This is only present for source distributions that come from registries.
     size: Option<u64>,
+    /// The upload time of the source distribution.
+    #[serde(alias = "upload_time")]
+    upload_time: Option<Timestamp>,
 }
 
 /// A URL or file path where the source dist that was
@@ -3582,7 +3562,7 @@ enum SourceDist {
         metadata: SourceDistMetadata,
     },
     Path {
-        path: PathBuf,
+        path: Box<Path>,
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
@@ -3619,7 +3599,7 @@ impl SourceDist {
         }
     }
 
-    fn hash(&self) -> Option<&Hash> {
+    pub(crate) fn hash(&self) -> Option<&Hash> {
         match &self {
             SourceDist::Metadata { metadata } => metadata.hash.as_ref(),
             SourceDist::Url { metadata, .. } => metadata.hash.as_ref(),
@@ -3627,11 +3607,19 @@ impl SourceDist {
         }
     }
 
-    fn size(&self) -> Option<u64> {
+    pub(crate) fn size(&self) -> Option<u64> {
         match &self {
             SourceDist::Metadata { metadata } => metadata.size,
             SourceDist::Url { metadata, .. } => metadata.size,
             SourceDist::Path { metadata, .. } => metadata.size,
+        }
+    }
+
+    pub(crate) fn upload_time(&self) -> Option<Timestamp> {
+        match &self {
+            SourceDist::Metadata { metadata } => metadata.upload_time,
+            SourceDist::Url { metadata, .. } => metadata.upload_time,
+            SourceDist::Path { metadata, .. } => metadata.upload_time,
         }
     }
 }
@@ -3714,9 +3702,19 @@ impl SourceDist {
                     .map_err(LockError::from)?;
                 let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
+                let upload_time = reg_dist
+                    .file
+                    .upload_time_utc_ms
+                    .map(Timestamp::from_millisecond)
+                    .transpose()
+                    .map_err(LockErrorKind::InvalidTimestamp)?;
                 Ok(Some(SourceDist::Url {
                     url,
-                    metadata: SourceDistMetadata { hash, size },
+                    metadata: SourceDistMetadata {
+                        hash,
+                        size,
+                        upload_time,
+                    },
                 }))
             }
             IndexUrl::Path(path) => {
@@ -3730,12 +3728,23 @@ impl SourceDist {
                     .map_err(|()| LockErrorKind::UrlToPath)?;
                 let path = relative_to(&reg_dist_path, index_path)
                     .or_else(|_| std::path::absolute(&reg_dist_path))
-                    .map_err(LockErrorKind::DistributionRelativePath)?;
+                    .map_err(LockErrorKind::DistributionRelativePath)?
+                    .into_boxed_path();
                 let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
+                let upload_time = reg_dist
+                    .file
+                    .upload_time_utc_ms
+                    .map(Timestamp::from_millisecond)
+                    .transpose()
+                    .map_err(LockErrorKind::InvalidTimestamp)?;
                 Ok(Some(SourceDist::Path {
                     path,
-                    metadata: SourceDistMetadata { hash, size },
+                    metadata: SourceDistMetadata {
+                        hash,
+                        size,
+                        upload_time,
+                    },
                 }))
             }
         }
@@ -3754,6 +3763,7 @@ impl SourceDist {
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
+                upload_time: None,
             },
         })
     }
@@ -3771,13 +3781,14 @@ impl SourceDist {
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
+                upload_time: None,
             },
         })
     }
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, rename_all = "kebab-case")]
 enum SourceDistWire {
     Url {
         url: UrlString,
@@ -3816,6 +3827,9 @@ impl SourceDist {
                 "size",
                 toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
             );
+        }
+        if let Some(upload_time) = self.upload_time() {
+            table.insert("upload-time", Value::from(upload_time.to_string()));
         }
         Ok(table)
     }
@@ -3931,6 +3945,10 @@ struct Wheel {
     ///
     /// This is only present for wheels that come from registries.
     size: Option<u64>,
+    /// The upload time of the built distribution.
+    ///
+    /// This is only present for wheels that come from registries.
+    upload_time: Option<Timestamp>,
     /// The filename of the wheel.
     ///
     /// This isn't part of the wire format since it's redundant with the
@@ -4015,11 +4033,18 @@ impl Wheel {
                     .map_err(LockError::from)?;
                 let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = wheel.file.size;
+                let upload_time = wheel
+                    .file
+                    .upload_time_utc_ms
+                    .map(Timestamp::from_millisecond)
+                    .transpose()
+                    .map_err(LockErrorKind::InvalidTimestamp)?;
                 Ok(Wheel {
                     url: WheelWireSource::Url { url },
                     hash,
                     size,
                     filename,
+                    upload_time,
                 })
             }
             IndexUrl::Path(path) => {
@@ -4033,11 +4058,13 @@ impl Wheel {
                     .map_err(|()| LockErrorKind::UrlToPath)?;
                 let path = relative_to(&wheel_path, index_path)
                     .or_else(|_| std::path::absolute(&wheel_path))
-                    .map_err(LockErrorKind::DistributionRelativePath)?;
+                    .map_err(LockErrorKind::DistributionRelativePath)?
+                    .into_boxed_path();
                 Ok(Wheel {
                     url: WheelWireSource::Path { path },
                     hash: None,
                     size: None,
+                    upload_time: None,
                     filename,
                 })
             }
@@ -4051,6 +4078,7 @@ impl Wheel {
             },
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
+            upload_time: None,
             filename: direct_dist.filename.clone(),
         }
     }
@@ -4062,11 +4090,12 @@ impl Wheel {
             },
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
+            upload_time: None,
             filename: path_dist.filename.clone(),
         }
     }
 
-    fn to_registry_dist(
+    pub(crate) fn to_registry_wheel(
         &self,
         source: &RegistrySource,
         root: &Path,
@@ -4091,7 +4120,7 @@ impl Wheel {
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
                     requires_python: None,
                     size: self.size,
-                    upload_time_utc_ms: None,
+                    upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
@@ -4123,7 +4152,7 @@ impl Wheel {
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
                     requires_python: None,
                     size: self.size,
-                    upload_time_utc_ms: None,
+                    upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
                     yanked: None,
                 });
@@ -4142,6 +4171,7 @@ impl Wheel {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct WheelWire {
     #[serde(flatten)]
     url: WheelWireSource,
@@ -4155,10 +4185,15 @@ struct WheelWire {
     ///
     /// This is only present for wheels that come from registries.
     size: Option<u64>,
+    /// The upload time of the built distribution.
+    ///
+    /// This is only present for wheels that come from registries.
+    #[serde(alias = "upload_time")]
+    upload_time: Option<Timestamp>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-#[serde(untagged)]
+#[serde(untagged, rename_all = "kebab-case")]
 enum WheelWireSource {
     /// Used for all wheels that come from remote sources.
     Url {
@@ -4171,7 +4206,7 @@ enum WheelWireSource {
     /// Used for wheels that come from local registries (like `--find-links`).
     Path {
         /// The path to the wheel, relative to the index.
-        path: PathBuf,
+        path: Box<Path>,
     },
     /// Used for path wheels.
     ///
@@ -4207,6 +4242,9 @@ impl Wheel {
                 toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
             );
         }
+        if let Some(upload_time) = self.upload_time {
+            table.insert("upload-time", Value::from(upload_time.to_string()));
+        }
         Ok(table)
     }
 }
@@ -4240,6 +4278,7 @@ impl TryFrom<WheelWire> for Wheel {
             url: wire.url,
             hash: wire.hash,
             size: wire.size,
+            upload_time: wire.upload_time,
             filename,
         })
     }
@@ -4358,6 +4397,7 @@ impl Display for Dependency {
 
 /// A single dependency of a package in a lockfile.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct DependencyWire {
     #[serde(flatten)]
     package_id: PackageIdForDependency,
@@ -4442,6 +4482,48 @@ impl<'de> serde::Deserialize<'de> for Hash {
     }
 }
 
+impl From<Hash> for Hashes {
+    fn from(value: Hash) -> Self {
+        match value.0.algorithm {
+            HashAlgorithm::Md5 => Hashes {
+                md5: Some(value.0.digest),
+                sha256: None,
+                sha384: None,
+                sha512: None,
+                blake2b: None,
+            },
+            HashAlgorithm::Sha256 => Hashes {
+                md5: None,
+                sha256: Some(value.0.digest),
+                sha384: None,
+                sha512: None,
+                blake2b: None,
+            },
+            HashAlgorithm::Sha384 => Hashes {
+                md5: None,
+                sha256: None,
+                sha384: Some(value.0.digest),
+                sha512: None,
+                blake2b: None,
+            },
+            HashAlgorithm::Sha512 => Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: Some(value.0.digest),
+                blake2b: None,
+            },
+            HashAlgorithm::Blake2b => Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: None,
+                blake2b: Some(value.0.digest),
+            },
+        }
+    }
+}
+
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
@@ -4517,7 +4599,8 @@ fn normalize_requirement(
             ext,
             url: _,
         } => {
-            let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
+            let install_path =
+                uv_fs::normalize_path_buf(root.join(&install_path)).into_boxed_path();
             let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -4540,7 +4623,8 @@ fn normalize_requirement(
             r#virtual,
             url: _,
         } => {
-            let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
+            let install_path =
+                uv_fs::normalize_path_buf(root.join(&install_path)).into_boxed_path();
             let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -4560,12 +4644,17 @@ fn normalize_requirement(
         }
         RequirementSource::Registry {
             specifier,
-            mut index,
+            index,
             conflict,
         } => {
-            if let Some(index) = index.as_mut() {
-                redact_credentials(index);
-            }
+            // Round-trip the index to remove anything apart from the URL.
+            let index = index
+                .map(|index| index.url.into_url())
+                .map(|mut index| {
+                    redact_credentials(&mut index);
+                    index
+                })
+                .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index))));
             Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,
@@ -4618,7 +4707,7 @@ fn normalize_requirement(
 #[derive(Debug)]
 pub struct LockError {
     kind: Box<LockErrorKind>,
-    hint: Option<LockErrorHint>,
+    hint: Option<WheelTagHint>,
 }
 
 impl std::error::Error for LockError {
@@ -4658,7 +4747,7 @@ where
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::enum_variant_names)]
-enum LockErrorHint {
+enum WheelTagHint {
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
     /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
     LanguageTags {
@@ -4685,7 +4774,123 @@ enum LockErrorHint {
     },
 }
 
-impl std::fmt::Display for LockErrorHint {
+impl WheelTagHint {
+    /// Generate a [`WheelTagHint`] from the given (incompatible) wheels.
+    fn from_wheels(
+        name: &PackageName,
+        version: Option<&Version>,
+        filenames: &[&WheelFilename],
+        tags: &Tags,
+    ) -> Option<WheelTagHint> {
+        let incompatibility = filenames
+            .iter()
+            .map(|filename| {
+                tags.compatibility(
+                    filename.python_tags(),
+                    filename.abi_tags(),
+                    filename.platform_tags(),
+                )
+            })
+            .max()?;
+        match incompatibility {
+            TagCompatibility::Incompatible(IncompatibleTag::Python) => {
+                let best = tags.python_tag();
+                let tags = Self::python_tags(filenames.iter().copied()).collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(WheelTagHint::LanguageTags {
+                        package: name.clone(),
+                        version: version.cloned(),
+                        tags,
+                        best,
+                    })
+                }
+            }
+            TagCompatibility::Incompatible(IncompatibleTag::Abi) => {
+                let best = tags.abi_tag();
+                let tags = Self::abi_tags(filenames.iter().copied())
+                    // Ignore `none`, which is universally compatible.
+                    //
+                    // As an example, `none` can appear here if we're solving for Python 3.13, and
+                    // the distribution includes a wheel for `cp312-none-macosx_11_0_arm64`.
+                    //
+                    // In that case, the wheel isn't compatible, but when solving for Python 3.13,
+                    // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
+                    // so this is considered an ABI incompatibility rather than Python incompatibility.
+                    .filter(|tag| *tag != AbiTag::None)
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(WheelTagHint::AbiTags {
+                        package: name.clone(),
+                        version: version.cloned(),
+                        tags,
+                        best,
+                    })
+                }
+            }
+            TagCompatibility::Incompatible(IncompatibleTag::Platform) => {
+                let best = tags.platform_tag().cloned();
+                let tags = Self::platform_tags(filenames.iter().copied(), tags)
+                    .cloned()
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(WheelTagHint::PlatformTags {
+                        package: name.clone(),
+                        version: version.cloned(),
+                        tags,
+                        best,
+                    })
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns an iterator over the compatible Python tags of the available wheels.
+    fn python_tags<'a>(
+        filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
+    ) -> impl Iterator<Item = LanguageTag> + 'a {
+        filenames
+            .flat_map(uv_distribution_filename::WheelFilename::python_tags)
+            .copied()
+    }
+
+    /// Returns an iterator over the compatible Python tags of the available wheels.
+    fn abi_tags<'a>(
+        filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
+    ) -> impl Iterator<Item = AbiTag> + 'a {
+        filenames
+            .flat_map(uv_distribution_filename::WheelFilename::abi_tags)
+            .copied()
+    }
+
+    /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
+    /// tags.
+    fn platform_tags<'a>(
+        filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
+        tags: &'a Tags,
+    ) -> impl Iterator<Item = &'a PlatformTag> + 'a {
+        filenames.flat_map(move |filename| {
+            if filename.python_tags().iter().any(|wheel_py| {
+                filename
+                    .abi_tags()
+                    .iter()
+                    .any(|wheel_abi| tags.is_compatible_abi(*wheel_py, *wheel_abi))
+            }) {
+                filename.platform_tags().iter()
+            } else {
+                [].iter()
+            }
+        })
+    }
+}
+
+impl std::fmt::Display for WheelTagHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::LanguageTags {
@@ -4963,6 +5168,13 @@ enum LockErrorKind {
         /// errant URL in the message.
         #[source]
         SourceParseError,
+    ),
+    #[error("Failed to parse timestamp")]
+    InvalidTimestamp(
+        /// The underlying error that occurred. This includes the
+        /// errant timestamp in the message.
+        #[source]
+        jiff::Error,
     ),
     /// An error that occurs when there's an unrecognized dependency.
     ///

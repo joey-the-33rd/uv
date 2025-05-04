@@ -57,7 +57,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -84,6 +84,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -134,8 +135,10 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -145,9 +148,28 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -216,7 +238,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -243,6 +265,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -293,8 +316,10 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -304,9 +329,28 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -376,7 +420,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -403,6 +447,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -453,8 +498,10 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -464,9 +511,28 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -568,7 +634,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -595,6 +661,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -645,8 +712,10 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -656,9 +725,28 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -729,7 +817,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -756,6 +844,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -786,9 +875,28 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -854,6 +962,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         version = "0.0.0"
 
         [tool.uv.pip]
+        python-platform = "x86_64-unknown-linux-gnu"
         resolution = "lowest-direct"
         generate-hashes = true
         index-url = "https://pypi.org/simple"
@@ -868,7 +977,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -895,6 +1004,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -945,8 +1055,10 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -956,9 +1068,28 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -992,7 +1123,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 {},
             ),
             python_version: None,
-            python_platform: None,
+            python_platform: Some(
+                X8664UnknownLinuxGnu,
+            ),
             universal: false,
             exclude_newer: None,
             no_emit_package: [],
@@ -1052,7 +1185,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -1079,6 +1212,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -1129,8 +1263,10 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -1159,8 +1295,10 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -1170,9 +1308,28 @@ fn resolve_index_url() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -1243,7 +1400,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -1270,6 +1427,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -1322,8 +1480,10 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -1352,8 +1512,10 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -1382,8 +1544,10 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -1393,9 +1557,28 @@ fn resolve_index_url() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -1489,7 +1672,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -1516,6 +1699,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -1567,8 +1751,10 @@ fn resolve_find_links() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Flat,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 no_index: true,
@@ -1577,9 +1763,28 @@ fn resolve_find_links() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -1672,7 +1877,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -1699,6 +1904,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -1729,9 +1935,28 @@ fn resolve_top_level() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -1817,7 +2042,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -1844,6 +2069,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -1894,8 +2120,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -1924,8 +2152,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -1935,9 +2165,28 @@ fn resolve_top_level() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2006,7 +2255,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2033,6 +2282,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2083,8 +2333,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -2113,8 +2365,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -2124,9 +2378,28 @@ fn resolve_top_level() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2218,7 +2491,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2245,6 +2518,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2275,9 +2549,28 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2353,7 +2646,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2380,6 +2673,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2410,9 +2704,28 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2488,7 +2801,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2515,6 +2828,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2545,9 +2859,28 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2625,7 +2958,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2652,6 +2985,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2682,9 +3016,28 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2781,7 +3134,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2815,6 +3168,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         with_editable: [],
         constraints: [],
         overrides: [],
+        build_constraints: [],
         python: None,
         refresh: None(
             Timestamp(
@@ -2893,6 +3247,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         install_mirrors: PythonInstallMirrors {
             python_install_mirror: None,
             pypy_install_mirror: None,
+            python_downloads_json_url: None,
         },
     }
 
@@ -2944,7 +3299,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2971,6 +3326,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -3001,9 +3357,28 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -3107,7 +3482,7 @@ fn resolve_both() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -3134,6 +3509,7 @@ fn resolve_both() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -3184,8 +3560,10 @@ fn resolve_both() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -3195,9 +3573,28 @@ fn resolve_both() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -3391,7 +3788,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -3418,6 +3815,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -3468,8 +3866,10 @@ fn resolve_config_file() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -3479,9 +3879,28 @@ fn resolve_config_file() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -3568,7 +3987,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
     "###
     );
 
@@ -3651,7 +4070,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -3678,6 +4097,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -3708,9 +4128,28 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -3789,7 +4228,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -3816,6 +4255,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -3846,9 +4286,28 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -3935,7 +4394,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -3973,6 +4432,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4003,9 +4463,28 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -4095,7 +4574,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4122,6 +4601,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4174,8 +4654,10 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -4204,8 +4686,10 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -4215,9 +4699,28 @@ fn index_priority() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -4286,7 +4789,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4313,6 +4816,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4365,8 +4869,10 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -4395,8 +4901,10 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -4406,9 +4914,28 @@ fn index_priority() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -4483,7 +5010,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4510,6 +5037,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4562,8 +5090,10 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -4592,8 +5122,10 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -4603,9 +5135,28 @@ fn index_priority() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -4675,7 +5226,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4702,6 +5253,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4754,8 +5306,10 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -4784,8 +5338,10 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -4795,9 +5351,28 @@ fn index_priority() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -4874,7 +5449,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4901,6 +5476,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4953,8 +5529,10 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -4983,8 +5561,10 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -4994,9 +5574,28 @@ fn index_priority() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5066,7 +5665,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5093,6 +5692,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -5145,8 +5745,10 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                     Index {
                         name: None,
@@ -5175,8 +5777,10 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
+                        ignore_error_codes: None,
                     },
                 ],
                 flat_index: [],
@@ -5186,9 +5790,28 @@ fn index_priority() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5271,7 +5894,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5329,9 +5952,28 @@ fn verify_hashes() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5400,7 +6042,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5458,9 +6100,28 @@ fn verify_hashes() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5527,7 +6188,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5585,9 +6246,28 @@ fn verify_hashes() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5656,7 +6336,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5714,9 +6394,28 @@ fn verify_hashes() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5783,7 +6482,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5841,9 +6540,28 @@ fn verify_hashes() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5911,7 +6629,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5969,9 +6687,28 @@ fn verify_hashes() -> anyhow::Result<()> {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                python_downloads_json_url: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,

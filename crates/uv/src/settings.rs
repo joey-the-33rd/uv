@@ -57,7 +57,7 @@ const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
 #[derive(Debug, Clone)]
 pub(crate) struct GlobalSettings {
     pub(crate) required_version: Option<RequiredVersion>,
-    pub(crate) quiet: bool,
+    pub(crate) quiet: u8,
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
     pub(crate) network_settings: NetworkSettings,
@@ -395,9 +395,13 @@ impl RunSettings {
             locked,
             frozen,
             extras: ExtrasSpecification::from_args(
-                flag(all_extras, no_all_extras).unwrap_or_default(),
-                no_extra,
                 extra.unwrap_or_default(),
+                no_extra,
+                // TODO(blueraft): support no_default_extras
+                false,
+                // TODO(blueraft): support only_extra
+                vec![],
+                flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
                 dev,
@@ -459,6 +463,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) python: Option<String>,
@@ -466,6 +471,8 @@ pub(crate) struct ToolRunSettings {
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) env_file: Vec<PathBuf>,
+    pub(crate) no_env_file: bool,
 }
 
 impl ToolRunSettings {
@@ -484,7 +491,10 @@ impl ToolRunSettings {
             with_requirements,
             constraints,
             overrides,
+            build_constraints,
             isolated,
+            env_file,
+            no_env_file,
             show_resolution,
             installer,
             build,
@@ -549,6 +559,10 @@ impl ToolRunSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_constraints: build_constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             isolated,
             show_resolution,
             python: python.and_then(Maybe::into_option),
@@ -556,6 +570,8 @@ impl ToolRunSettings {
             settings,
             options,
             install_mirrors,
+            env_file,
+            no_env_file,
         }
     }
 }
@@ -571,6 +587,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -593,6 +610,7 @@ impl ToolInstallSettings {
             with_requirements,
             constraints,
             overrides,
+            build_constraints,
             installer,
             force,
             build,
@@ -635,6 +653,10 @@ impl ToolInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -820,19 +842,22 @@ pub(crate) enum PythonListKinds {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonListSettings {
+    pub(crate) request: Option<String>,
     pub(crate) kinds: PythonListKinds,
     pub(crate) all_platforms: bool,
     pub(crate) all_arches: bool,
     pub(crate) all_versions: bool,
     pub(crate) show_urls: bool,
     pub(crate) output_format: PythonListFormat,
+    pub(crate) python_downloads_json_url: Option<String>,
 }
 
 impl PythonListSettings {
     /// Resolve the [`PythonListSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: PythonListArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PythonListArgs {
+            request,
             all_versions,
             all_platforms,
             all_arches,
@@ -840,7 +865,17 @@ impl PythonListSettings {
             only_downloads,
             show_urls,
             output_format,
+            python_downloads_json_url: python_downloads_json_url_arg,
         } = args;
+
+        let options = filesystem.map(FilesystemOptions::into_options);
+        let python_downloads_json_url_option = match options {
+            Some(options) => options.install_mirrors.python_downloads_json_url,
+            None => None,
+        };
+
+        let python_downloads_json_url =
+            python_downloads_json_url_arg.or(python_downloads_json_url_option);
 
         let kinds = if only_installed {
             PythonListKinds::Installed
@@ -851,12 +886,14 @@ impl PythonListSettings {
         };
 
         Self {
+            request,
             kinds,
             all_platforms,
             all_arches,
             all_versions,
             show_urls,
             output_format,
+            python_downloads_json_url,
         }
     }
 }
@@ -888,6 +925,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) force: bool,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
 }
 
@@ -896,15 +934,18 @@ impl PythonInstallSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let options = filesystem.map(FilesystemOptions::into_options);
-        let (python_mirror, pypy_mirror) = match options {
+        let (python_mirror, pypy_mirror, python_downloads_json_url) = match options {
             Some(options) => (
                 options.install_mirrors.python_install_mirror,
                 options.install_mirrors.pypy_install_mirror,
+                options.install_mirrors.python_downloads_json_url,
             ),
-            None => (None, None),
+            None => (None, None, None),
         };
         let python_mirror = args.mirror.or(python_mirror);
         let pypy_mirror = args.pypy_mirror.or(pypy_mirror);
+        let python_downloads_json_url =
+            args.python_downloads_json_url.or(python_downloads_json_url);
 
         let PythonInstallArgs {
             install_dir,
@@ -913,6 +954,7 @@ impl PythonInstallSettings {
             force,
             mirror: _,
             pypy_mirror: _,
+            python_downloads_json_url: _,
             default,
         } = args;
 
@@ -923,6 +965,7 @@ impl PythonInstallSettings {
             force,
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
+            python_downloads_json_url,
             default,
         }
     }
@@ -963,6 +1006,7 @@ impl PythonUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
+    pub(crate) show_version: bool,
     pub(crate) no_project: bool,
     pub(crate) system: bool,
 }
@@ -973,6 +1017,7 @@ impl PythonFindSettings {
     pub(crate) fn resolve(args: PythonFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let PythonFindArgs {
             request,
+            show_version,
             no_project,
             system,
             no_system,
@@ -981,6 +1026,7 @@ impl PythonFindSettings {
 
         Self {
             request,
+            show_version,
             no_project,
             system: flag(system, no_system).unwrap_or_default(),
         }
@@ -1102,9 +1148,13 @@ impl SyncSettings {
             script,
             active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
-                flag(all_extras, no_all_extras).unwrap_or_default(),
-                no_extra,
                 extra.unwrap_or_default(),
+                no_extra,
+                // TODO(blueraft): support no_default_extras
+                false,
+                // TODO(blueraft): support only_extra
+                vec![],
+                flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
                 dev,
@@ -1267,6 +1317,7 @@ impl AddSettings {
                     .index
                     .clone()
                     .into_iter()
+                    .flat_map(|v| v.clone())
                     .flatten()
                     .filter_map(Maybe::into_option),
             )
@@ -1502,7 +1553,7 @@ impl TreeSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct ExportSettings {
-    pub(crate) format: ExportFormat,
+    pub(crate) format: Option<ExportFormat>,
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) prune: Vec<PackageName>,
@@ -1514,6 +1565,7 @@ pub(crate) struct ExportSettings {
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) include_annotations: bool,
     pub(crate) include_header: bool,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
@@ -1543,6 +1595,8 @@ impl ExportSettings {
             no_default_groups,
             only_group,
             all_groups,
+            annotate,
+            no_annotate,
             header,
             no_header,
             no_editable,
@@ -1571,9 +1625,13 @@ impl ExportSettings {
             package,
             prune,
             extras: ExtrasSpecification::from_args(
-                flag(all_extras, no_all_extras).unwrap_or_default(),
-                no_extra,
                 extra.unwrap_or_default(),
+                no_extra,
+                // TODO(blueraft): support no_default_extras
+                false,
+                // TODO(blueraft): support only_extra
+                vec![],
+                flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
                 dev,
@@ -1595,6 +1653,7 @@ impl ExportSettings {
             output_file,
             locked,
             frozen,
+            include_annotations: flag(annotate, no_annotate).unwrap_or(true),
             include_header: flag(header, no_header).unwrap_or(true),
             script,
             python: python.and_then(Maybe::into_option),
@@ -1609,6 +1668,7 @@ impl ExportSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
+    pub(crate) format: Option<ExportFormat>,
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
@@ -1637,6 +1697,7 @@ impl PipCompileSettings {
             deps,
             group,
             output_file,
+            format,
             no_strip_extras,
             strip_extras,
             no_strip_markers,
@@ -1725,6 +1786,7 @@ impl PipCompileSettings {
         };
 
         Self {
+            format,
             src_file,
             constraints: constraints
                 .into_iter()
@@ -2825,10 +2887,15 @@ impl PipSettings {
                 args.no_index.combine(no_index).unwrap_or_default(),
             ),
             extras: ExtrasSpecification::from_args(
-                args.all_extras.combine(all_extras).unwrap_or_default(),
-                args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
+                args.no_extra.combine(no_extra).unwrap_or_default(),
+                // TODO(blueraft): support no_default_extras
+                false,
+                // TODO(blueraft): support only_extra
+                vec![],
+                args.all_extras.combine(all_extras).unwrap_or_default(),
             ),
+
             groups: args.group.combine(group).unwrap_or_default(),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
                 DependencyMode::Direct

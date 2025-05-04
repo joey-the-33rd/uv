@@ -222,6 +222,7 @@ async fn venv_impl(
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await
         .into_diagnostic()?;
@@ -253,7 +254,7 @@ async fn venv_impl(
                 warn_user!("{err}");
             }
         }
-    };
+    }
 
     writeln!(
         printer.stderr(),
@@ -295,7 +296,7 @@ async fn venv_impl(
         let client = RegistryClientBuilder::try_from(client_builder)
             .into_diagnostic()?
             .cache(cache.clone())
-            .index_urls(index_locations.index_urls())
+            .index_locations(index_locations)
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())
@@ -306,9 +307,9 @@ async fn venv_impl(
         // Resolve the flat indexes from `--find-links`.
         let flat_index = {
             let tags = interpreter.tags().map_err(VenvError::Tags)?;
-            let client = FlatIndexClient::new(&client, cache);
+            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
             let entries = client
-                .fetch(index_locations.flat_indexes().map(Index::url))
+                .fetch_all(index_locations.flat_indexes().map(Index::url))
                 .await
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(

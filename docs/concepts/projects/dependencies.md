@@ -1,8 +1,8 @@
 # Managing dependencies
 
-## Dependency tables
+## Dependency fields
 
-Dependencies of the project are defined in several tables:
+Dependencies of the project are defined in several fields:
 
 - [`project.dependencies`](#project-dependencies): Published dependencies.
 - [`project.optional-dependencies`](#optional-dependencies): Published optional dependencies, or
@@ -12,7 +12,7 @@ Dependencies of the project are defined in several tables:
 
 !!! note
 
-    The `project.dependencies` and `project.optional-dependencies` tables can be used even if
+    The `project.dependencies` and `project.optional-dependencies` fields can be used even if
     project isn't going to be published. `dependency-groups` are a recently standardized feature
     and may not be supported by all tools yet.
 
@@ -27,7 +27,7 @@ To add a dependency:
 $ uv add httpx
 ```
 
-An entry will be added in the `project.dependencies` table:
+An entry will be added in the `project.dependencies` field:
 
 ```toml title="pyproject.toml" hl_lines="4"
 [project]
@@ -38,7 +38,7 @@ dependencies = ["httpx>=0.27.2"]
 
 The [`--dev`](#development-dependencies), [`--group`](#dependency-groups), or
 [`--optional`](#optional-dependencies) flags can be used to add a dependencies to an alternative
-table.
+field.
 
 The dependency will include a constraint, e.g., `>=0.27.2`, for the most recent, compatible version
 of the package. An alternative constraint can be provided:
@@ -48,7 +48,7 @@ $ uv add "httpx>=0.20"
 ```
 
 When adding a dependency from a source other than a package registry, uv will add an entry in the
-sources table. For example, when adding `httpx` from GitHub:
+sources field. For example, when adding `httpx` from GitHub:
 
 ```console
 $ uv add "httpx @ git+https://github.com/encode/httpx"
@@ -198,9 +198,9 @@ dependencies = [
 The `tool.uv.sources` table extends the standard dependency tables with alternative dependency
 sources, which are used during development.
 
-Dependency sources add support common patterns that are not supported by the `project.dependencies`
-standard, like editable installations and relative paths. For example, to install `foo` from a
-directory relative to the project root:
+Dependency sources add support for common patterns that are not supported by the
+`project.dependencies` standard, like editable installations and relative paths. For example, to
+install `foo` from a directory relative to the project root:
 
 ```toml title="pyproject.toml" hl_lines="7"
 [project]
@@ -261,7 +261,7 @@ When defining an index, an `explicit` flag can be included to indicate that the 
 be used for packages that explicitly specify it in `tool.uv.sources`. If `explicit` is not set,
 other packages may be resolved from the index, if not found elsewhere.
 
-```toml title="pyproject.toml" hl_lines="3"
+```toml title="pyproject.toml" hl_lines="4"
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
@@ -484,7 +484,7 @@ environment markers.
 
 For example, to pull in different `httpx` tags on macOS vs. Linux:
 
-```toml title="pyproject.toml" hl_lines="8-9 13-14"
+```toml title="pyproject.toml" hl_lines="6-7"
 [project]
 dependencies = ["httpx"]
 
@@ -511,10 +511,12 @@ torch = [
 [[tool.uv.index]]
 name = "torch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [[tool.uv.index]]
 name = "torch-gpu"
 url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 ```
 
 ### Disabling sources

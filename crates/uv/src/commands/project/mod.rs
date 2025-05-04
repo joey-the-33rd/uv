@@ -6,9 +6,8 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -72,7 +71,7 @@ pub(crate) mod tree;
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error("The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.")]
-    LockMismatch,
+    LockMismatch(Box<Lock>),
 
     #[error(
         "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
@@ -340,7 +339,11 @@ impl std::fmt::Display for ConflictError {
                                 }
                                 ConflictPackage::Group(ref group) => format!("group `{group}`"),
                             };
-                            (i == 0).then(|| capitalize(&conflict)).unwrap_or(conflict)
+                            if i == 0 {
+                                capitalize(&conflict)
+                            } else {
+                                conflict
+                            }
                         })
                         .collect()
                 )
@@ -561,12 +564,12 @@ impl ScriptInterpreter {
 
             if value.is_empty() {
                 return None;
-            };
+            }
 
             let path = PathBuf::from(value);
             if path.is_absolute() {
                 return Some(path);
-            };
+            }
 
             // Resolve the path relative to current directory.
             Some(CWD.join(path))
@@ -657,7 +660,6 @@ impl ScriptInterpreter {
         } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
 
         let root = Self::root(script, active, cache);
-
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
                 if python_request.as_ref().is_none_or(|request| {
@@ -689,7 +691,7 @@ impl ScriptInterpreter {
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
             Err(err) => warn!("Ignoring existing script environment: {err}"),
-        };
+        }
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(network_settings.connectivity)
@@ -708,6 +710,7 @@ impl ScriptInterpreter {
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?
         .into_interpreter();
@@ -763,6 +766,43 @@ impl ScriptInterpreter {
     }
 }
 
+/// Whether an environment is usable for the project, i.e., if it matches the requirements.
+fn environment_is_usable(
+    environment: &PythonEnvironment,
+    python_request: Option<&PythonRequest>,
+    requires_python: Option<&RequiresPython>,
+    cache: &Cache,
+) -> bool {
+    if let Some((cfg_version, int_version)) = environment.get_pyvenv_version_conflict() {
+        debug!("The interpreter in the virtual environment has different version ({int_version}) than it was created with ({cfg_version})");
+        return false;
+    }
+
+    if let Some(request) = python_request {
+        if request.satisfied(environment.interpreter(), cache) {
+            debug!("The virtual environment's Python version satisfies the request: `{request}`");
+        } else {
+            debug!("The virtual environment's Python version does not satisfy the request: `{request}`");
+            return false;
+        }
+    }
+
+    if let Some(requires_python) = requires_python.as_ref() {
+        if requires_python.contains(environment.interpreter().python_version()) {
+            trace!(
+                "The virtual environment's Python version meets the Python requirement: `{requires_python}`"
+            );
+        } else {
+            debug!(
+                "The virtual environment's Python version does not meet the Python requirement: `{requires_python}`"
+            );
+            return false;
+        }
+    }
+
+    true
+}
+
 /// An interpreter suitable for the project.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -800,31 +840,13 @@ impl ProjectInterpreter {
         let venv = workspace.venv(active);
         match PythonEnvironment::from_root(&venv, cache) {
             Ok(venv) => {
-                if python_request.as_ref().is_none_or(|request| {
-                    if request.satisfied(venv.interpreter(), cache) {
-                        debug!(
-                            "The virtual environment's Python version satisfies `{}`",
-                            request.to_canonical_string()
-                        );
-                        true
-                    } else {
-                        debug!(
-                            "The virtual environment's Python version does not satisfy `{}`",
-                            request.to_canonical_string()
-                        );
-                        false
-                    }
-                }) {
-                    if let Some(requires_python) = requires_python.as_ref() {
-                        if requires_python.contains(venv.interpreter().python_version()) {
-                            return Ok(Self::Environment(venv));
-                        }
-                        debug!(
-                            "The virtual environment's Python version does not meet the project's Python requirement: `{requires_python}`"
-                        );
-                    } else {
-                        return Ok(Self::Environment(venv));
-                    }
+                if environment_is_usable(
+                    &venv,
+                    python_request.as_ref(),
+                    requires_python.as_ref(),
+                    cache,
+                ) {
+                    return Ok(Self::Environment(venv));
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
@@ -849,7 +871,7 @@ impl ProjectInterpreter {
                     }
                     // If the environment is an empty directory, it's fine to use
                     InvalidEnvironmentKind::Empty => {}
-                };
+                }
             }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
                 if path.is_symlink() {
@@ -862,7 +884,7 @@ impl ProjectInterpreter {
                 }
             }
             Err(err) => return Err(err.into()),
-        };
+        }
 
         let client_builder = BaseClientBuilder::default()
             .connectivity(network_settings.connectivity)
@@ -882,6 +904,7 @@ impl ProjectInterpreter {
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;
 
@@ -1033,7 +1056,7 @@ impl WorkspacePython {
                 "Using Python request `{}` from {source}",
                 python_request.to_canonical_string()
             );
-        };
+        }
 
         Ok(Self {
             source,
@@ -1098,7 +1121,7 @@ impl ScriptPython {
 
         if let Some(python_request) = python_request.as_ref() {
             debug!("Using Python request {python_request} from {source}");
-        };
+        }
 
         Ok(Self {
             source,
@@ -1526,6 +1549,12 @@ pub(crate) async fn resolve_names(
         reinstall: _,
     } = settings;
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(*keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
@@ -1538,14 +1567,10 @@ pub(crate) async fn resolve_names(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
+        .index_locations(index_locations)
         .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1674,6 +1699,12 @@ pub(crate) async fn resolve_environment(
         ..
     } = spec.requirements;
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(*keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
     let marker_env = interpreter.resolver_marker_environment();
@@ -1691,14 +1722,10 @@ pub(crate) async fn resolve_environment(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
+        .index_locations(index_locations)
         .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1752,9 +1779,9 @@ pub(crate) async fn resolve_environment(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, cache);
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
         let entries = client
-            .fetch(index_locations.flat_indexes().map(Index::url))
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
@@ -1820,6 +1847,7 @@ pub(crate) async fn sync_environment(
     venv: PythonEnvironment,
     resolution: &Resolution,
     modifications: Modifications,
+    build_constraints: Constraints,
     settings: InstallerSettingsRef<'_>,
     network_settings: &NetworkSettings,
     state: &PlatformState,
@@ -1846,6 +1874,12 @@ pub(crate) async fn sync_environment(
         sources,
     } = settings;
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     let site_packages = SitePackages::from_environment(&venv)?;
 
     // Determine the markers tags to use for resolution.
@@ -1864,14 +1898,10 @@ pub(crate) async fn sync_environment(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
+        .index_locations(index_locations)
         .index_strategy(index_strategy)
-        .keyring(keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1887,7 +1917,6 @@ pub(crate) async fn sync_environment(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let dry_run = DryRun::default();
     let hasher = HashStrategy::default();
@@ -1895,9 +1924,9 @@ pub(crate) async fn sync_environment(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, cache);
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
         let entries = client
-            .fetch(index_locations.flat_indexes().map(Index::url))
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
@@ -1978,6 +2007,7 @@ pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     modifications: Modifications,
+    build_constraints: Constraints,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
     state: &SharedState,
@@ -2015,6 +2045,12 @@ pub(crate) async fn update_environment(
         compile_bytecode,
         reinstall,
     } = settings;
+
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(*keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Respect all requirements from the provided sources.
     let RequirementsSpecification {
@@ -2077,14 +2113,10 @@ pub(crate) async fn update_environment(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
+        .index_locations(index_locations)
         .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -2109,7 +2141,6 @@ pub(crate) async fn update_environment(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
@@ -2122,9 +2153,9 @@ pub(crate) async fn update_environment(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, cache);
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
         let entries = client
-            .fetch(index_locations.flat_indexes().map(Index::url))
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
@@ -2263,6 +2294,7 @@ pub(crate) async fn init_script_python_requirement(
         Some(reporter),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();

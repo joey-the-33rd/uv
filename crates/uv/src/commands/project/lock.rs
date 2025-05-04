@@ -9,7 +9,6 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -333,7 +332,7 @@ impl<'env> LockOperation<'env> {
 
                 // If the lockfile changed, return an error.
                 if matches!(result, LockResult::Changed(_, _)) {
-                    return Err(ProjectError::LockMismatch);
+                    return Err(ProjectError::LockMismatch(Box::new(result.into_lock())));
                 }
 
                 Ok(result)
@@ -567,6 +566,13 @@ async fn do_lock(
     let python_requirement =
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
+    // Initialize the client.
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(*keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
@@ -589,14 +595,10 @@ async fn do_lock(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
+        .index_locations(index_locations)
         .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -624,8 +626,6 @@ async fn do_lock(
         .build();
     let hasher = HashStrategy::Generate(HashGeneration::Url);
 
-    let build_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_hasher = HashStrategy::default();
@@ -634,9 +634,9 @@ async fn do_lock(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, cache);
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
         let entries = client
-            .fetch(index_locations.flat_indexes().map(Index::url))
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
@@ -647,7 +647,7 @@ async fn do_lock(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        Constraints::from_requirements(build_constraints.iter().cloned()),
         interpreter,
         index_locations,
         &flat_index,
@@ -679,6 +679,7 @@ async fn do_lock(
             &dependency_groups,
             &constraints,
             &overrides,
+            &build_constraints,
             &conflicts,
             environments,
             required_environments,
@@ -837,6 +838,7 @@ async fn do_lock(
                 requirements,
                 constraints,
                 overrides,
+                build_constraints,
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
@@ -889,6 +891,7 @@ impl ValidatedLock {
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
         overrides: &[Requirement],
+        build_constraints: &[Requirement],
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,
@@ -1066,6 +1069,7 @@ impl ValidatedLock {
                 requirements,
                 constraints,
                 overrides,
+                build_constraints,
                 dependency_groups,
                 dependency_metadata,
                 indexes,
@@ -1140,6 +1144,13 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedOverrides(expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedBuildConstraints(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched build constraints:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

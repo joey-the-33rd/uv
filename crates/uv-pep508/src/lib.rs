@@ -124,7 +124,7 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     pub name: PackageName,
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
-    pub extras: Vec<ExtraName>,
+    pub extras: Box<[ExtraName]>,
     /// The version specifier such as `>= 2.8.1`, `== 2.8.*` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// or a URL.
@@ -443,27 +443,22 @@ fn parse_name<T: Pep508Url>(cursor: &mut Cursor) -> Result<PackageName, Pep508Er
         });
     }
 
-    loop {
-        if let Some((index, char @ ('A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))) =
-            cursor.peek()
-        {
-            cursor.next();
-            // [.-_] can't be the final character
-            if cursor.peek().is_none() && matches!(char, '.' | '-' | '_') {
-                return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(format!(
-                        "Package name must end with an alphanumeric character, not `{char}`"
-                    )),
-                    start: index,
-                    len: char.len_utf8(),
-                    input: cursor.to_string(),
-                });
-            }
-        } else {
-            let len = cursor.pos() - start;
-            return Ok(PackageName::from_str(cursor.slice(start, len)).unwrap());
-        }
+    cursor.take_while(|char| matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'));
+    let len = cursor.pos() - start;
+    // Unwrap-safety: The block above ensures that there is at least one char in the buffer.
+    let last = cursor.slice(start, len).chars().last().unwrap();
+    // [.-_] can't be the final character
+    if !matches!(last, 'A'..='Z' | 'a'..='z' | '0'..='9') {
+        return Err(Pep508Error {
+            message: Pep508ErrorSource::String(format!(
+                "Package name must end with an alphanumeric character, not `{last}`"
+            )),
+            start: cursor.pos() - last.len_utf8(),
+            len: last.len_utf8(),
+            input: cursor.to_string(),
+        });
     }
+    Ok(PackageName::from_str(cursor.slice(start, len)).unwrap())
 }
 
 /// Parse a potential URL from the [`Cursor`], advancing the [`Cursor`] to the end of the URL.
@@ -635,7 +630,7 @@ fn parse_extras_cursor<T: Pep508Url>(
                 });
             }
             _ => {}
-        };
+        }
         // wsp* after the identifier
         cursor.eat_whitespace();
 
@@ -964,7 +959,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
 
     Ok(Requirement {
         name,
-        extras,
+        extras: extras.into_boxed_slice(),
         version_or_url: requirement_kind,
         marker: marker.unwrap_or_default(),
         origin: None,
@@ -1058,10 +1053,10 @@ mod tests {
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
             name: PackageName::from_str("requests").unwrap(),
-            extras: vec![
+            extras: Box::new([
                 ExtraName::from_str("security").unwrap(),
                 ExtraName::from_str("tests").unwrap(),
-            ],
+            ]),
             version_or_url: Some(VersionOrUrl::VersionSpecifier(
                 [
                     VersionSpecifier::from_pattern(
@@ -1126,7 +1121,7 @@ mod tests {
     fn direct_url_no_extras() {
         let numpy = crate::UnnamedRequirement::<VerbatimUrl>::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
         assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
-        assert_eq!(numpy.extras, vec![]);
+        assert_eq!(*numpy.extras, []);
     }
 
     #[test]
@@ -1140,7 +1135,7 @@ mod tests {
             numpy.url.to_string(),
             "file:///path/to/numpy-1.26.4-cp312-cp312-win32.whl"
         );
-        assert_eq!(numpy.extras, vec![ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(*numpy.extras, [ExtraName::from_str("dev").unwrap()]);
     }
 
     #[test]
@@ -1154,7 +1149,7 @@ mod tests {
             numpy.url.to_string(),
             "file:///C:/path/to/numpy-1.26.4-cp312-cp312-win32.whl"
         );
-        assert_eq!(numpy.extras, vec![ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(*numpy.extras, [ExtraName::from_str("dev").unwrap()]);
     }
 
     #[test]
@@ -1244,15 +1239,15 @@ mod tests {
     #[test]
     fn error_extras1() {
         let numpy = Requirement::<Url>::from_str("black[d]").unwrap();
-        assert_eq!(numpy.extras, vec![ExtraName::from_str("d").unwrap()]);
+        assert_eq!(*numpy.extras, [ExtraName::from_str("d").unwrap()]);
     }
 
     #[test]
     fn error_extras2() {
         let numpy = Requirement::<Url>::from_str("black[d,jupyter]").unwrap();
         assert_eq!(
-            numpy.extras,
-            vec![
+            *numpy.extras,
+            [
                 ExtraName::from_str("d").unwrap(),
                 ExtraName::from_str("jupyter").unwrap(),
             ]
@@ -1262,13 +1257,13 @@ mod tests {
     #[test]
     fn empty_extras() {
         let black = Requirement::<Url>::from_str("black[]").unwrap();
-        assert_eq!(black.extras, vec![]);
+        assert_eq!(*black.extras, []);
     }
 
     #[test]
     fn empty_extras_with_spaces() {
         let black = Requirement::<Url>::from_str("black[  ]").unwrap();
-        assert_eq!(black.extras, vec![]);
+        assert_eq!(*black.extras, []);
     }
 
     #[test]
@@ -1325,7 +1320,7 @@ mod tests {
         let url = "https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686";
         let expected = Requirement {
             name: PackageName::from_str("pip").unwrap(),
-            extras: vec![],
+            extras: Box::new([]),
             marker: MarkerTree::TRUE,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
             origin: None,
@@ -1529,6 +1524,24 @@ mod tests {
           ^
     "#
         );
+    }
+
+    #[test]
+    fn parse_name_with_star() {
+        assert_snapshot!(
+            parse_pep508_err("wheel-*.whl"),
+            @r"
+        Package name must end with an alphanumeric character, not `-`
+        wheel-*.whl
+             ^
+        ");
+        assert_snapshot!(
+            parse_pep508_err("wheelѦ"),
+            @r"
+        Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `Ѧ`
+        wheelѦ
+             ^
+        ");
     }
 
     #[test]

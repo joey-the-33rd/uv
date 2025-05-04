@@ -58,15 +58,9 @@ impl PubGrubDependency {
             } else {
                 Either::Right(iter::empty())
             };
-            Either::Left(Either::Left(
-                base.chain(
-                    requirement
-                        .extras
-                        .clone()
-                        .into_iter()
-                        .map(|extra| (Some(extra), None)),
-                ),
-            ))
+            Either::Left(Either::Left(base.chain(
+                Box::into_iter(requirement.extras.clone()).map(|extra| (Some(extra), None)),
+            )))
         } else if !requirement.groups.is_empty() {
             let base = if requirement
                 .groups
@@ -77,15 +71,9 @@ impl PubGrubDependency {
             } else {
                 Either::Right(iter::empty())
             };
-            Either::Left(Either::Right(
-                base.chain(
-                    requirement
-                        .groups
-                        .clone()
-                        .into_iter()
-                        .map(|group| (None, Some(group))),
-                ),
-            ))
+            Either::Left(Either::Right(base.chain(
+                Box::into_iter(requirement.groups.clone()).map(|group| (None, Some(group))),
+            )))
         } else {
             Either::Right(iter::once((None, None)))
         };
@@ -139,10 +127,11 @@ impl PubGrubDependency {
                         url,
                     }
                 }
-                PubGrubPackageInner::Root(_) => unreachable!("root package in dependencies"),
+                PubGrubPackageInner::Root(_) => unreachable!("Root package in dependencies"),
                 PubGrubPackageInner::Python(_) => {
-                    unreachable!("python package in dependencies")
+                    unreachable!("Python package in dependencies")
                 }
+                PubGrubPackageInner::System(_) => unreachable!("System package in dependencies"),
             }
         })
     }

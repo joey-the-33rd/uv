@@ -39,6 +39,8 @@ mod lock_conflict;
 
 mod lock_scenarios;
 
+mod version;
+
 mod pip_check;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
@@ -71,6 +73,9 @@ mod python_dir;
 
 #[cfg(feature = "python")]
 mod python_find;
+
+#[cfg(feature = "python")]
+mod python_list;
 
 #[cfg(feature = "python-managed")]
 mod python_install;

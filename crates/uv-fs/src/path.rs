@@ -258,7 +258,7 @@ fn normalized(path: &Path) -> PathBuf {
                 normalized.push(component);
             }
             Component::ParentDir => {
-                match normalized.components().last() {
+                match normalized.components().next_back() {
                     None | Some(Component::ParentDir | Component::RootDir) => {
                         // Preserve leading and above-root `..`
                         normalized.push(component);
@@ -331,7 +331,7 @@ pub fn relative_to(
 
     // go as many levels up as required
     let levels_up = base.components().count() - common_prefix.components().count();
-    let up = std::iter::repeat("..").take(levels_up).collect::<PathBuf>();
+    let up = std::iter::repeat_n("..", levels_up).collect::<PathBuf>();
 
     Ok(up.join(stripped))
 }
@@ -344,7 +344,7 @@ pub fn relative_to(
 pub struct PortablePath<'a>(&'a Path);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PortablePathBuf(PathBuf);
+pub struct PortablePathBuf(Box<Path>);
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for PortablePathBuf {
@@ -397,21 +397,21 @@ impl std::fmt::Display for PortablePathBuf {
 impl From<&str> for PortablePathBuf {
     fn from(path: &str) -> Self {
         if path == "." {
-            Self(PathBuf::new())
+            Self(PathBuf::new().into_boxed_path())
         } else {
-            Self(PathBuf::from(path))
+            Self(PathBuf::from(path).into_boxed_path())
         }
     }
 }
 
-impl From<PortablePathBuf> for PathBuf {
+impl From<PortablePathBuf> for Box<Path> {
     fn from(portable: PortablePathBuf) -> Self {
         portable.0
     }
 }
 
-impl From<PathBuf> for PortablePathBuf {
-    fn from(path: PathBuf) -> Self {
+impl From<Box<Path>> for PortablePathBuf {
+    fn from(path: Box<Path>) -> Self {
         Self(path)
     }
 }
@@ -444,10 +444,16 @@ impl<'de> serde::de::Deserialize<'de> for PortablePathBuf {
     {
         let s = String::deserialize(deserializer)?;
         if s == "." {
-            Ok(Self(PathBuf::new()))
+            Ok(Self(PathBuf::new().into_boxed_path()))
         } else {
-            Ok(Self(PathBuf::from(s)))
+            Ok(Self(PathBuf::from(s).into_boxed_path()))
         }
+    }
+}
+
+impl AsRef<Path> for PortablePathBuf {
+    fn as_ref(&self) -> &Path {
+        &self.0
     }
 }
 

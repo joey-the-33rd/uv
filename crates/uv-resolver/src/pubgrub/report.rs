@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexUrl,
+    IndexLocations, IndexMetadata, IndexUrl,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -711,7 +711,7 @@ impl PubGrubReportFormatter<'_> {
                     output_hints,
                 );
             }
-        };
+        }
     }
 
     /// Generate a [`PubGrubHint`] for a package that doesn't have any wheels matching the current
@@ -727,7 +727,7 @@ impl PubGrubReportFormatter<'_> {
         env: &ResolverEnvironment,
         tags: Option<&Tags>,
     ) -> Option<PubGrubHint> {
-        let response = if let Some(url) = fork_indexes.get(name) {
+        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
             index.explicit().get(&(name.clone(), url.clone()))
         } else {
             index.implicit().get(name)
@@ -930,12 +930,6 @@ impl PubGrubReportFormatter<'_> {
                 });
             }
             if index_capabilities.forbidden(&index.url) {
-                // If the index is a PyTorch index (e.g., `https://download.pytorch.org/whl/cu118`),
-                // avoid noting the lack of credentials. PyTorch returns a 403 (Forbidden) status
-                // code for any package that does not exist.
-                if index.url.url().host_str() == Some("download.pytorch.org") {
-                    continue;
-                }
                 hints.insert(PubGrubHint::ForbiddenIndex {
                     index: index.url.clone(),
                 });
@@ -1957,7 +1951,7 @@ impl std::fmt::Display for PackageRange<'_> {
                 (Bound::Excluded(v), Bound::Unbounded) => write!(f, "{package}>{v}")?,
                 (Bound::Excluded(v), Bound::Included(b)) => write!(f, "{package}>{v},<={b}")?,
                 (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, "{package}>{v},<{b}")?,
-            };
+            }
         }
         if segments.len() > 1 {
             writeln!(f)?;
@@ -2015,7 +2009,7 @@ impl std::fmt::Display for DependsOn<'_> {
             write!(f, "depend on ")?;
         } else {
             write!(f, "depends on ")?;
-        };
+        }
 
         match self.dependency2 {
             Some(ref dependency2) => write!(

@@ -122,7 +122,7 @@ malicious package to be installed instead of the internal package. See, for exam
 [the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/) from
 December 2022.
 
-Users can opt in to alternate index behaviors via the`--index-strategy` command-line option, or the
+To opt in to alternate index behaviors, use the`--index-strategy` command-line option, or the
 `UV_INDEX_STRATEGY` environment variable, which supports the following values:
 
 - `first-index` (default): Search for each package across all indexes, limiting the candidate
@@ -207,7 +207,30 @@ authenticate = "always"
 ```
 
 When `authenticate` is set to `always`, uv will eagerly search for credentials and error if
-credentials cannot be found.
+credentials cannot be found. If the discovered credentials are not valid (i.e., the index returns a
+HTTP 401 or 403), then uv will treat packages as unavailable and query the next configured index as
+described in the [index strategy](#searching-across-multiple-indexes) section.
+
+### Ignoring error codes when searching across indexes
+
+When using the [first-index strategy](#searching-across-multiple-indexes), uv will stop searching
+across indexes if an HTTP 401 Unauthorized or HTTP 403 Forbidden status code is encountered. The one
+exception is that uv will ignore 403s when searching the `pytorch` index (since this index returns a
+403 when a package is not present).
+
+To configure which error codes are ignored for an index, use the `ignored-error-codes` setting. For
+example, to ignore 403s (but not 401s) for a private index:
+
+```toml
+[[tool.uv.index]]
+name = "private-index"
+url = "https://private-index.com/simple"
+authenticate = "always"
+ignore-error-codes = [403]
+```
+
+uv will always continue searching across indexes when it encounters a `404 Not Found`. This cannot
+be overridden.
 
 ### Disabling authentication
 
@@ -222,6 +245,25 @@ authenticate = "never"
 
 When `authenticate` is set to `never`, uv will never search for credentials for the given index and
 will error if credentials are provided directly.
+
+## "Flat" indexes
+
+By default, `[[tool.uv.index]]` entries are assumed to be PyPI-style registries that implement the
+[PEP 503](https://peps.python.org/pep-0503/) Simple Repository API. However, uv also supports "flat"
+indexes, which are local directories or HTML pages that contain flat lists of wheels and source
+distributions. In pip, such indexes are specified using the `--find-links` option.
+
+To define a flat index in your `pyproject.toml`, use the `format = "flat"` option:
+
+```toml
+[[tool.uv.index]]
+name = "example"
+url = "/path/to/directory"
+format = "flat"
+```
+
+Flat indexes support the same feature set as Simple Repository API indexes (e.g.,
+`explicit = true`); you can also pin a package to a flat index using `tool.uv.sources`.
 
 ## `--index-url` and `--extra-index-url`
 

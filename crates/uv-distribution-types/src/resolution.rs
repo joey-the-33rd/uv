@@ -3,7 +3,9 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{HashDigest, HashDigests};
 
-use crate::{BuiltDist, Diagnostic, Dist, Name, RequirementSource, ResolvedDist, SourceDist};
+use crate::{
+    BuiltDist, Diagnostic, Dist, IndexMetadata, Name, RequirementSource, ResolvedDist, SourceDist,
+};
 
 /// A set of packages pinned at specific versions.
 ///
@@ -17,7 +19,7 @@ pub struct Resolution {
 }
 
 impl Resolution {
-    /// Create a new resolution from the given pinned packages.
+    /// Create a [`Resolution`] from the given pinned packages.
     pub fn new(graph: petgraph::graph::DiGraph<Node, Edge>) -> Self {
         Self {
             graph,
@@ -206,17 +208,6 @@ pub enum Edge {
     Dev(GroupName, MarkerTree),
 }
 
-impl Edge {
-    /// Return the [`MarkerTree`] for this edge.
-    pub fn marker(&self) -> &MarkerTree {
-        match self {
-            Self::Prod(marker) => marker,
-            Self::Optional(_, marker) => marker,
-            Self::Dev(_, marker) => marker,
-        }
-    }
-}
-
 impl From<&ResolvedDist> for RequirementSource {
     fn from(resolved_dist: &ResolvedDist) -> Self {
         match resolved_dist {
@@ -229,7 +220,7 @@ impl From<&ResolvedDist> for RequirementSource {
                                 wheel.filename.version.clone(),
                             ),
                         ),
-                        index: Some(wheel.index.url().clone()),
+                        index: Some(IndexMetadata::from(wheel.index.clone())),
                         conflict: None,
                     }
                 }
@@ -252,7 +243,7 @@ impl From<&ResolvedDist> for RequirementSource {
                     specifier: uv_pep440::VersionSpecifiers::from(
                         uv_pep440::VersionSpecifier::equals_version(sdist.version.clone()),
                     ),
-                    index: Some(sdist.index.url().clone()),
+                    index: Some(IndexMetadata::from(sdist.index.clone())),
                     conflict: None,
                 },
                 Dist::Source(SourceDist::DirectUrl(sdist)) => {

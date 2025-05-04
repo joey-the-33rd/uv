@@ -216,12 +216,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 {
                     Ok(archive) => Ok(LocalWheel {
                         dist: Dist::Built(dist.clone()),
-                        archive: self.build_context.cache().archive(&archive.id),
+                        archive: self
+                            .build_context
+                            .cache()
+                            .archive(&archive.id)
+                            .into_boxed_path(),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                         cache: CacheInfo::default(),
                     }),
-                    Err(Error::Extract(err)) => {
+                    Err(Error::Extract(name, err)) => {
                         if err.is_http_streaming_unsupported() {
                             warn!(
                                 "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
@@ -229,7 +233,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         } else if err.is_http_streaming_failed() {
                             warn!("Streaming failed for {dist}; downloading wheel to disk ({err})");
                         } else {
-                            return Err(Error::Extract(err));
+                            return Err(Error::Extract(name, err));
                         }
 
                         // If the request failed because streaming is unsupported, download the
@@ -247,7 +251,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                         Ok(LocalWheel {
                             dist: Dist::Built(dist.clone()),
-                            archive: self.build_context.cache().archive(&archive.id),
+                            archive: self
+                                .build_context
+                                .cache()
+                                .archive(&archive.id)
+                                .into_boxed_path(),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
                             cache: CacheInfo::default(),
@@ -279,7 +287,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 {
                     Ok(archive) => Ok(LocalWheel {
                         dist: Dist::Built(dist.clone()),
-                        archive: self.build_context.cache().archive(&archive.id),
+                        archive: self
+                            .build_context
+                            .cache()
+                            .archive(&archive.id)
+                            .into_boxed_path(),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                         cache: CacheInfo::default(),
@@ -303,7 +315,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             .await?;
                         Ok(LocalWheel {
                             dist: Dist::Built(dist.clone()),
-                            archive: self.build_context.cache().archive(&archive.id),
+                            archive: self
+                                .build_context
+                                .cache()
+                                .archive(&archive.id)
+                                .into_boxed_path(),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
                             cache: CacheInfo::default(),
@@ -368,7 +384,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Ok(archive) => {
                 return Ok(LocalWheel {
                     dist: Dist::Source(dist.clone()),
-                    archive,
+                    archive: archive.into_boxed_path(),
                     filename: built_wheel.filename,
                     hashes: built_wheel.hashes,
                     cache: built_wheel.cache_info,
@@ -385,7 +401,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         Ok(LocalWheel {
             dist: Dist::Source(dist.clone()),
-            archive: self.build_context.cache().archive(&id),
+            archive: self.build_context.cache().archive(&id).into_boxed_path(),
             hashes: built_wheel.hashes,
             filename: built_wheel.filename,
             cache: built_wheel.cache_info,
@@ -554,10 +570,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
-                        uv_extract::stream::unzip(&mut reader, temp_dir.path()).await?;
+                        uv_extract::stream::unzip(&mut reader, temp_dir.path())
+                            .await
+                            .map_err(|err| Error::Extract(filename.to_string(), err))?;
                     }
                     None => {
-                        uv_extract::stream::unzip(&mut hasher, temp_dir.path()).await?;
+                        uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                            .await
+                            .map_err(|err| Error::Extract(filename.to_string(), err))?;
                     }
                 }
 
@@ -718,7 +738,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             Ok(())
                         }
                     })
-                    .await??;
+                    .await?
+                    .map_err(|err| Error::Extract(filename.to_string(), err))?;
 
                     HashDigests::empty()
                 } else {
@@ -726,7 +747,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     let algorithms = hashes.algorithms();
                     let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                     let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
-                    uv_extract::stream::unzip(&mut hasher, temp_dir.path()).await?;
+                    uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                        .await
+                        .map_err(|err| Error::Extract(filename.to_string(), err))?;
 
                     // If necessary, exhaust the reader to compute the hash.
                     hasher.finish().await.map_err(Error::HashExhaustion)?;
@@ -837,7 +860,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         if let Some(archive) = archive {
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
-                archive: self.build_context.cache().archive(&archive.id),
+                archive: self
+                    .build_context
+                    .cache()
+                    .archive(&archive.id)
+                    .into_boxed_path(),
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
@@ -859,7 +886,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
-                archive: self.build_context.cache().archive(&archive.id),
+                archive: self
+                    .build_context
+                    .cache()
+                    .archive(&archive.id)
+                    .into_boxed_path(),
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
@@ -878,7 +909,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            uv_extract::stream::unzip(&mut hasher, temp_dir.path()).await?;
+            uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                .await
+                .map_err(|err| Error::Extract(filename.to_string(), err))?;
 
             // Exhaust the reader to compute the hash.
             hasher.finish().await.map_err(Error::HashExhaustion)?;
@@ -905,7 +938,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
-                archive: self.build_context.cache().archive(&archive.id),
+                archive: self
+                    .build_context
+                    .cache()
+                    .archive(&archive.id)
+                    .into_boxed_path(),
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
@@ -921,8 +958,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             move || -> Result<TempDir, Error> {
                 // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
-                let reader = fs_err::File::open(path).map_err(Error::CacheWrite)?;
-                uv_extract::unzip(reader, temp_dir.path())?;
+                let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
+                uv_extract::unzip(reader, temp_dir.path())
+                    .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
                 Ok(temp_dir)
             }
         })

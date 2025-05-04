@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
@@ -14,11 +15,28 @@ use crate::Realm;
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum FetchUrl {
+    /// A full index URL
+    Index(Url),
+    /// A realm URL
+    Realm(Realm),
+}
+
+impl Display for FetchUrl {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Index(index) => Display::fmt(index, f),
+            Self::Realm(realm) => Display::fmt(realm, f),
+        }
+    }
+}
+
 pub struct CredentialsCache {
     /// A cache per realm and username
     realms: RwLock<FxHashMap<(Realm, Username), Arc<Credentials>>>,
-    /// A cache tracking the result of fetches from external services
-    pub(crate) fetches: FxOnceMap<(Realm, Username), Option<Arc<Credentials>>>,
+    /// A cache tracking the result of realm or index URL fetches from external services
+    pub(crate) fetches: FxOnceMap<(FetchUrl, Username), Option<Arc<Credentials>>>,
     /// A cache per URL, uses a trie for efficient prefix queries.
     urls: RwLock<UrlTrie>,
 }
@@ -245,19 +263,19 @@ mod tests {
 
     #[test]
     fn test_trie() {
-        let credentials1 = Arc::new(Credentials::new(
+        let credentials1 = Arc::new(Credentials::basic(
             Some("username1".to_string()),
             Some("password1".to_string()),
         ));
-        let credentials2 = Arc::new(Credentials::new(
+        let credentials2 = Arc::new(Credentials::basic(
             Some("username2".to_string()),
             Some("password2".to_string()),
         ));
-        let credentials3 = Arc::new(Credentials::new(
+        let credentials3 = Arc::new(Credentials::basic(
             Some("username3".to_string()),
             Some("password3".to_string()),
         ));
-        let credentials4 = Arc::new(Credentials::new(
+        let credentials4 = Arc::new(Credentials::basic(
             Some("username4".to_string()),
             Some("password4".to_string()),
         ));

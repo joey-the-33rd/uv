@@ -18,9 +18,9 @@ use crate::Metadata;
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
     pub name: PackageName,
-    pub requires_dist: Vec<Requirement>,
-    pub provides_extras: Vec<ExtraName>,
-    pub dependency_groups: BTreeMap<GroupName, Vec<Requirement>>,
+    pub requires_dist: Box<[Requirement]>,
+    pub provides_extras: Box<[ExtraName]>,
+    pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
     pub dynamic: bool,
 }
 
@@ -30,9 +30,7 @@ impl RequiresDist {
     pub fn from_metadata23(metadata: uv_pypi_types::RequiresDist) -> Self {
         Self {
             name: metadata.name,
-            requires_dist: metadata
-                .requires_dist
-                .into_iter()
+            requires_dist: Box::into_iter(metadata.requires_dist)
                 .map(Requirement::from)
                 .collect(),
             provides_extras: metadata.provides_extras,
@@ -51,8 +49,7 @@ impl RequiresDist {
         sources: SourceStrategy,
         cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
-        // TODO(konsti): Cache workspace discovery.
-        let discovery_options = DiscoveryOptions {
+        let discovery = DiscoveryOptions {
             stop_discovery_at: git_member.map(|git_member| {
                 git_member
                     .fetch_root
@@ -66,8 +63,7 @@ impl RequiresDist {
             },
         };
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery_options, cache)
-                .await?
+            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
@@ -185,17 +181,17 @@ impl RequiresDist {
                                 },
                             )
                         })
-                        .collect::<Result<Vec<_>, _>>(),
+                        .collect::<Result<Box<_>, _>>(),
                     SourceStrategy::Disabled => {
                         Ok(requirements.into_iter().map(Requirement::from).collect())
                     }
                 }?;
-                Ok::<(GroupName, Vec<Requirement>), MetadataError>((name, requirements))
+                Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
 
         // Lower the requirements.
-        let requires_dist = metadata.requires_dist.into_iter();
+        let requires_dist = Box::into_iter(metadata.requires_dist);
         let requires_dist = match source_strategy {
             SourceStrategy::Enabled => requires_dist
                 .flat_map(|requirement| {
@@ -222,7 +218,7 @@ impl RequiresDist {
                         )),
                     })
                 })
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect::<Result<Box<_>, _>>()?,
             SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
 
@@ -353,11 +349,11 @@ impl From<Metadata> for RequiresDist {
 /// The [`FlatRequiresDist`] struct is used to flatten out the recursive dependencies, i.e., convert
 /// from the former to the latter.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FlatRequiresDist(Vec<Requirement>);
+pub struct FlatRequiresDist(Box<[Requirement]>);
 
 impl FlatRequiresDist {
     /// Flatten a set of requirements, resolving any self-references.
-    pub fn from_requirements(requirements: Vec<Requirement>, name: &PackageName) -> Self {
+    pub fn from_requirements(requirements: Box<[Requirement]>, name: &PackageName) -> Self {
         // If there are no self-references, we can return early.
         if requirements.iter().all(|req| req.name != *name) {
             return Self(requirements);
@@ -370,7 +366,7 @@ impl FlatRequiresDist {
             .collect();
 
         // Transitively process all extras that are recursively included.
-        let mut flattened = requirements.clone();
+        let mut flattened = requirements.to_vec();
         let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
         let mut queue: VecDeque<_> = flattened
             .iter()
@@ -426,7 +422,7 @@ impl FlatRequiresDist {
                 if !req.source.is_empty() {
                     flattened.push(Requirement {
                         name: req.name.clone(),
-                        extras: vec![],
+                        extras: Box::new([]),
                         groups: req.groups.clone(),
                         source: req.source.clone(),
                         origin: req.origin.clone(),
@@ -436,21 +432,21 @@ impl FlatRequiresDist {
             }
         }
 
-        Self(flattened)
+        Self(flattened.into_boxed_slice())
     }
 
-    /// Consume the [`FlatRequiresDist`] and return the inner vector.
-    pub fn into_inner(self) -> Vec<Requirement> {
+    /// Consume the [`FlatRequiresDist`] and return the inner requirements.
+    pub fn into_inner(self) -> Box<[Requirement]> {
         self.0
     }
 }
 
 impl IntoIterator for FlatRequiresDist {
     type Item = Requirement;
-    type IntoIter = std::vec::IntoIter<Requirement>;
+    type IntoIter = <Box<[Requirement]> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        Box::into_iter(self.0)
     }
 }
 
@@ -501,12 +497,14 @@ mod test {
     }
 
     async fn format_err(input: &str) -> String {
+        use std::fmt::Write;
+
         let err = requires_dist_from_pyproject_toml(input).await.unwrap_err();
         let mut causes = err.chain();
         let mut message = String::new();
-        message.push_str(&format!("error: {}\n", causes.next().unwrap()));
+        let _ = writeln!(message, "error: {}", causes.next().unwrap());
         for err in causes {
-            message.push_str(&format!("  Caused by: {err}\n"));
+            let _ = writeln!(message, "  Caused by: {err}");
         }
         message
     }
@@ -750,7 +748,7 @@ mod test {
     #[test]
     fn test_flat_requires_dist_noop() {
         let name = PackageName::from_str("pkg").unwrap();
-        let requirements = vec![
+        let requirements = [
             Requirement::from_str("requests>=2.0.0").unwrap().into(),
             Requirement::from_str("pytest; extra == 'test'")
                 .unwrap()
@@ -760,17 +758,20 @@ mod test {
                 .into(),
         ];
 
-        let expected = FlatRequiresDist(vec![
-            Requirement::from_str("requests>=2.0.0").unwrap().into(),
-            Requirement::from_str("pytest; extra == 'test'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("black; extra == 'dev'")
-                .unwrap()
-                .into(),
-        ]);
+        let expected = FlatRequiresDist(
+            [
+                Requirement::from_str("requests>=2.0.0").unwrap().into(),
+                Requirement::from_str("pytest; extra == 'test'")
+                    .unwrap()
+                    .into(),
+                Requirement::from_str("black; extra == 'dev'")
+                    .unwrap()
+                    .into(),
+            ]
+            .into(),
+        );
 
-        let actual = FlatRequiresDist::from_requirements(requirements, &name);
+        let actual = FlatRequiresDist::from_requirements(requirements.into(), &name);
 
         assert_eq!(actual, expected);
     }
@@ -778,7 +779,7 @@ mod test {
     #[test]
     fn test_flat_requires_dist_basic() {
         let name = PackageName::from_str("pkg").unwrap();
-        let requirements = vec![
+        let requirements = [
             Requirement::from_str("requests>=2.0.0").unwrap().into(),
             Requirement::from_str("pytest; extra == 'test'")
                 .unwrap()
@@ -791,20 +792,23 @@ mod test {
                 .into(),
         ];
 
-        let expected = FlatRequiresDist(vec![
-            Requirement::from_str("requests>=2.0.0").unwrap().into(),
-            Requirement::from_str("pytest; extra == 'test'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("black; extra == 'dev'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("black; extra == 'test'")
-                .unwrap()
-                .into(),
-        ]);
+        let expected = FlatRequiresDist(
+            [
+                Requirement::from_str("requests>=2.0.0").unwrap().into(),
+                Requirement::from_str("pytest; extra == 'test'")
+                    .unwrap()
+                    .into(),
+                Requirement::from_str("black; extra == 'dev'")
+                    .unwrap()
+                    .into(),
+                Requirement::from_str("black; extra == 'test'")
+                    .unwrap()
+                    .into(),
+            ]
+            .into(),
+        );
 
-        let actual = FlatRequiresDist::from_requirements(requirements, &name);
+        let actual = FlatRequiresDist::from_requirements(requirements.into(), &name);
 
         assert_eq!(actual, expected);
     }
@@ -825,20 +829,23 @@ mod test {
                 .into(),
         ];
 
-        let expected = FlatRequiresDist(vec![
-            Requirement::from_str("requests>=2.0.0").unwrap().into(),
-            Requirement::from_str("pytest; extra == 'test'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("black; extra == 'dev' and sys_platform == 'win32'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("black; extra == 'test' and sys_platform == 'win32'")
-                .unwrap()
-                .into(),
-        ]);
+        let expected = FlatRequiresDist(
+            [
+                Requirement::from_str("requests>=2.0.0").unwrap().into(),
+                Requirement::from_str("pytest; extra == 'test'")
+                    .unwrap()
+                    .into(),
+                Requirement::from_str("black; extra == 'dev' and sys_platform == 'win32'")
+                    .unwrap()
+                    .into(),
+                Requirement::from_str("black; extra == 'test' and sys_platform == 'win32'")
+                    .unwrap()
+                    .into(),
+            ]
+            .into(),
+        );
 
-        let actual = FlatRequiresDist::from_requirements(requirements, &name);
+        let actual = FlatRequiresDist::from_requirements(requirements.into(), &name);
 
         assert_eq!(actual, expected);
     }
@@ -846,7 +853,7 @@ mod test {
     #[test]
     fn test_flat_requires_dist_self_constraint() {
         let name = PackageName::from_str("pkg").unwrap();
-        let requirements = vec![
+        let requirements = [
             Requirement::from_str("requests>=2.0.0").unwrap().into(),
             Requirement::from_str("pytest; extra == 'test'")
                 .unwrap()
@@ -857,18 +864,21 @@ mod test {
             Requirement::from_str("pkg[async]==1.0.0").unwrap().into(),
         ];
 
-        let expected = FlatRequiresDist(vec![
-            Requirement::from_str("requests>=2.0.0").unwrap().into(),
-            Requirement::from_str("pytest; extra == 'test'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("black; extra == 'dev'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("pkg==1.0.0").unwrap().into(),
-        ]);
+        let expected = FlatRequiresDist(
+            [
+                Requirement::from_str("requests>=2.0.0").unwrap().into(),
+                Requirement::from_str("pytest; extra == 'test'")
+                    .unwrap()
+                    .into(),
+                Requirement::from_str("black; extra == 'dev'")
+                    .unwrap()
+                    .into(),
+                Requirement::from_str("pkg==1.0.0").unwrap().into(),
+            ]
+            .into(),
+        );
 
-        let actual = FlatRequiresDist::from_requirements(requirements, &name);
+        let actual = FlatRequiresDist::from_requirements(requirements.into(), &name);
 
         assert_eq!(actual, expected);
     }

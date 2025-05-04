@@ -38,7 +38,7 @@ pub(crate) async fn self_update(
                     "\n",
                     "If you installed uv with pip, brew, or another package manager, update uv with `pip install --upgrade`, `brew upgrade`, or similar."
                 ),
-                "warning".yellow().bold(),
+                "error".red().bold(),
                 ":".bold()
             )
         )?;
@@ -62,7 +62,7 @@ pub(crate) async fn self_update(
                     "\n",
                     "The current executable is at `{}` but the standalone installer was used to install uv to `{}`. Are multiple copies of uv installed?"
                 ),
-                "warning".yellow().bold(),
+                "error".red().bold(),
                 ":".bold(),
                 current_exe.simplified_display().bold().cyan(),
                 receipt_prefix.simplified_display().bold().cyan()
@@ -96,11 +96,11 @@ pub(crate) async fn self_update(
             let version_information = if let Some(old_version) = result.old_version {
                 format!(
                     "from {} to {}",
-                    format!("v{old_version}").bold().white(),
-                    format!("v{}", result.new_version).bold().white(),
+                    format!("v{old_version}").bold().cyan(),
+                    format!("v{}", result.new_version).bold().cyan(),
                 )
             } else {
-                format!("to {}", format!("v{}", result.new_version).bold().white())
+                format!("to {}", format!("v{}", result.new_version).bold().cyan())
             };
 
             writeln!(
@@ -127,7 +127,7 @@ pub(crate) async fn self_update(
                     "{}{} You're on the latest version of uv ({})",
                     "success".green().bold(),
                     ":".bold(),
-                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()
+                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().cyan()
                 )
             )?;
         }

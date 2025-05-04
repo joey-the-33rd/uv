@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
@@ -8,9 +9,9 @@ use uv_auth::{AuthPolicy, Credentials};
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
-use crate::{IndexUrl, IndexUrlError};
+use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode};
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Index {
@@ -62,13 +63,13 @@ pub struct Index {
     /// The origin of the index (e.g., a CLI flag, a user-level configuration file, etc.).
     #[serde(skip)]
     pub origin: Option<Origin>,
-    // /// The type of the index.
-    // ///
-    // /// Indexes can either be PEP 503-compliant (i.e., a registry implementing the Simple API) or
-    // /// structured as a flat list of distributions (e.g., `--find-links`). In both cases, indexes
-    // /// can point to either local or remote resources.
-    // #[serde(default)]
-    // pub r#type: IndexKind,
+    /// The format used by the index.
+    ///
+    /// Indexes can either be PEP 503-compliant (i.e., a PyPI-style registry implementing the Simple
+    /// API) or structured as a flat list of distributions (e.g., `--find-links`). In both cases,
+    /// indexes can point to either local or remote resources.
+    #[serde(default)]
+    pub format: IndexFormat,
     /// The URL of the upload endpoint.
     ///
     /// When using `uv publish --index <name>`, this URL is used for publishing.
@@ -92,19 +93,41 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub authenticate: AuthPolicy,
+    /// Status codes that uv should ignore when deciding whether
+    /// to continue searching in the next index after a failure.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// ignore-error-codes = [401, 403]
+    /// ```
+    #[serde(default)]
+    pub ignore_error_codes: Option<Vec<SerializableStatusCode>>,
 }
 
-// #[derive(
-//     Default, Debug, Copy, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize,
-// )]
-// #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-// pub enum IndexKind {
-//     /// A PEP 503 and/or PEP 691-compliant index.
-//     #[default]
-//     Simple,
-//     /// An index containing a list of links to distributions (e.g., `--find-links`).
-//     Flat,
-// }
+#[derive(
+    Default,
+    Debug,
+    Copy,
+    Clone,
+    Hash,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub enum IndexFormat {
+    /// A PyPI-style index implementing the Simple Repository API.
+    #[default]
+    Simple,
+    /// A `--find-links`-style index containing a flat list of wheels and source distributions.
+    Flat,
+}
 
 impl Index {
     /// Initialize an [`Index`] from a pip-style `--index-url`.
@@ -115,8 +138,10 @@ impl Index {
             explicit: false,
             default: true,
             origin: None,
+            format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 
@@ -128,8 +153,10 @@ impl Index {
             explicit: false,
             default: false,
             origin: None,
+            format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 
@@ -141,8 +168,10 @@ impl Index {
             explicit: false,
             default: false,
             origin: None,
+            format: IndexFormat::Flat,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 
@@ -198,6 +227,31 @@ impl Index {
         }
         Ok(self)
     }
+
+    /// Return the [`IndexStatusCodeStrategy`] for this index.
+    pub fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
+        if let Some(ignore_error_codes) = &self.ignore_error_codes {
+            IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)
+        } else {
+            IndexStatusCodeStrategy::from_index_url(self.url.url())
+        }
+    }
+}
+
+impl From<IndexUrl> for Index {
+    fn from(value: IndexUrl) -> Self {
+        Self {
+            name: None,
+            url: value,
+            explicit: false,
+            default: false,
+            origin: None,
+            format: IndexFormat::Simple,
+            publish_url: None,
+            authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
+        }
+    }
 }
 
 impl FromStr for Index {
@@ -215,8 +269,10 @@ impl FromStr for Index {
                     explicit: false,
                     default: false,
                     origin: None,
+                    format: IndexFormat::Simple,
                     publish_url: None,
                     authenticate: AuthPolicy::default(),
+                    ignore_error_codes: None,
                 });
             }
         }
@@ -229,9 +285,92 @@ impl FromStr for Index {
             explicit: false,
             default: false,
             origin: None,
+            format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         })
+    }
+}
+
+/// An [`IndexUrl`] along with the metadata necessary to query the index.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct IndexMetadata {
+    /// The URL of the index.
+    pub url: IndexUrl,
+    /// The format used by the index.
+    pub format: IndexFormat,
+}
+
+impl IndexMetadata {
+    /// Return a reference to the [`IndexMetadata`].
+    pub fn as_ref(&self) -> IndexMetadataRef<'_> {
+        let Self { url, format: kind } = self;
+        IndexMetadataRef { url, format: *kind }
+    }
+
+    /// Consume the [`IndexMetadata`] and return the [`IndexUrl`].
+    pub fn into_url(self) -> IndexUrl {
+        self.url
+    }
+}
+
+/// A reference to an [`IndexMetadata`].
+#[derive(Debug, Copy, Clone)]
+pub struct IndexMetadataRef<'a> {
+    /// The URL of the index.
+    pub url: &'a IndexUrl,
+    /// The format used by the index.
+    pub format: IndexFormat,
+}
+
+impl IndexMetadata {
+    /// Return the [`IndexUrl`] of the index.
+    pub fn url(&self) -> &IndexUrl {
+        &self.url
+    }
+}
+
+impl IndexMetadataRef<'_> {
+    /// Return the [`IndexUrl`] of the index.
+    pub fn url(&self) -> &IndexUrl {
+        self.url
+    }
+}
+
+impl<'a> From<&'a Index> for IndexMetadataRef<'a> {
+    fn from(value: &'a Index) -> Self {
+        Self {
+            url: &value.url,
+            format: value.format,
+        }
+    }
+}
+
+impl<'a> From<&'a IndexMetadata> for IndexMetadataRef<'a> {
+    fn from(value: &'a IndexMetadata) -> Self {
+        Self {
+            url: &value.url,
+            format: value.format,
+        }
+    }
+}
+
+impl From<IndexUrl> for IndexMetadata {
+    fn from(value: IndexUrl) -> Self {
+        Self {
+            url: value,
+            format: IndexFormat::Simple,
+        }
+    }
+}
+
+impl<'a> From<&'a IndexUrl> for IndexMetadataRef<'a> {
+    fn from(value: &'a IndexUrl) -> Self {
+        Self {
+            url: value,
+            format: IndexFormat::Simple,
+        }
     }
 }
 
